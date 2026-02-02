@@ -1,3 +1,4 @@
+import { Colors } from "@/constants/theme";
 import React from "react";
 import {
   ActivityIndicator,
@@ -43,7 +44,7 @@ export function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === "secondary" ? "#007AFF" : "#fff"}
+          color={variant === "secondary" ? Colors.primary : Colors.textWhite}
         />
       ) : (
         <Text style={[styles.buttonText, styles[`${variant}Text`], textStyle]}>
@@ -58,36 +59,40 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 50,
+    alignSelf: "center",
+    width: "80%",
+    maxWidth: 320,
   },
   primary: {
-    backgroundColor: "#007AFF",
+    backgroundColor: Colors.primary,
   },
   secondary: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#007AFF",
+    backgroundColor: Colors.backgroundAccent,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
   },
   danger: {
-    backgroundColor: "#e74c3c",
+    backgroundColor: Colors.error,
   },
   disabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   primaryText: {
-    color: "#fff",
+    color: Colors.textWhite,
   },
   secondaryText: {
-    color: "#007AFF",
+    color: Colors.textPrimary,
   },
   dangerText: {
-    color: "#fff",
+    color: Colors.textWhite,
   },
 });

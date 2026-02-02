@@ -1,3 +1,4 @@
+import { Colors } from "@/constants/theme";
 import { type FileMetadata, formatTimestamp } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
@@ -44,7 +45,11 @@ export function FileItem({ file, onPress }: FileItemProps) {
       activeOpacity={0.7}
     >
       <View style={styles.iconContainer}>
-        <Ionicons name={getFileIcon(file.fileType)} size={28} color="#007AFF" />
+        <Ionicons
+          name={getFileIcon(file.fileType)}
+          size={28}
+          color={Colors.primary}
+        />
       </View>
       <View style={styles.infoContainer}>
         <Text style={styles.fileName} numberOfLines={1}>
@@ -54,7 +59,7 @@ export function FileItem({ file, onPress }: FileItemProps) {
         <Text style={styles.metadata}>Uploaded by {file.uploadedByEmail}</Text>
         <Text style={styles.timestamp}>{formatTimestamp(file.timestamp)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#ccc" />
+      <Ionicons name="chevron-forward" size={20} color={Colors.iconMuted} />
     </TouchableOpacity>
   );
 }
@@ -63,48 +68,52 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.backgroundWhite,
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 6,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 10,
-    backgroundColor: "#f0f7ff",
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 14,
   },
   infoContainer: {
     flex: 1,
   },
   fileName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    marginBottom: 4,
   },
   fileType: {
     fontSize: 11,
-    color: "#007AFF",
-    fontWeight: "500",
+    color: Colors.primary,
+    fontWeight: "600",
     marginBottom: 4,
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: "flex-start",
+    overflow: "hidden",
   },
   metadata: {
     fontSize: 12,
-    color: "#666",
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   timestamp: {
     fontSize: 11,
-    color: "#999",
+    color: Colors.textMuted,
     marginTop: 2,
   },
 });

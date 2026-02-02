@@ -1,4 +1,5 @@
 import { Button, FileItem, LoadingSpinner } from "@/components/ui";
+import { Colors } from "@/constants/theme";
 import {
   getAllFiles,
   getLoggedInUser,
@@ -143,7 +144,7 @@ export default function DashboardScreen() {
           <Text style={styles.headerSubtitle}>{userEmail}</Text>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Ionicons name="log-out-outline" size={24} color="#e74c3c" />
+          <Ionicons name="log-out-outline" size={22} color={Colors.textWhite} />
         </TouchableOpacity>
       </View>
 
@@ -163,7 +164,11 @@ export default function DashboardScreen() {
 
         {files.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="cloud-upload-outline" size={64} color="#ccc" />
+            <Ionicons
+              name="cloud-upload-outline"
+              size={64}
+              color={Colors.iconMuted}
+            />
             <Text style={styles.emptyText}>No files uploaded yet</Text>
             <Text style={styles.emptySubtext}>
               Tap "Upload File" to get started
@@ -180,7 +185,7 @@ export default function DashboardScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                tintColor="#007AFF"
+                tintColor={Colors.primary}
               />
             }
             contentContainerStyle={styles.listContent}
@@ -195,51 +200,54 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.primary,
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    paddingTop: 56,
+    paddingBottom: 20,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 26,
+    fontWeight: "800",
+    color: Colors.textWhite,
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: "#666",
-    marginTop: 2,
+    color: Colors.primaryLight,
+    marginTop: 4,
   },
   logoutButton: {
-    padding: 8,
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 10,
   },
   uploadSection: {
-    padding: 16,
-    backgroundColor: "#fff",
+    padding: 20,
+    backgroundColor: Colors.backgroundWhite,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: Colors.borderLight,
   },
   listContainer: {
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textSecondary,
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: 20,
+    paddingBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   emptyState: {
     flex: 1,
@@ -249,13 +257,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "600",
-    color: "#666",
-    marginTop: 16,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    marginTop: 20,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#999",
+    color: Colors.textMuted,
     marginTop: 8,
     textAlign: "center",
   },

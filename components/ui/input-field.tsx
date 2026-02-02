@@ -1,3 +1,4 @@
+import { Colors } from "@/constants/theme";
 import React from "react";
 import {
   StyleSheet,
@@ -18,7 +19,7 @@ export function InputField({ label, error, style, ...props }: InputFieldProps) {
       {label && <Text style={styles.label}>{label}</Text>}
       <TextInput
         style={[styles.input, error && styles.inputError, style]}
-        placeholderTextColor="#999"
+        placeholderTextColor={Colors.textMuted}
         {...props}
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -28,31 +29,35 @@ export function InputField({ label, error, style, ...props }: InputFieldProps) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
+    marginBottom: 18,
     width: "100%",
   },
   label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    backgroundColor: Colors.backgroundAccent,
+    borderWidth: 1.5,
+    borderColor: Colors.borderLight,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: "#333",
+    color: Colors.textPrimary,
   },
   inputError: {
-    borderColor: "#e74c3c",
+    borderColor: Colors.error,
+    backgroundColor: Colors.errorLight,
   },
   errorText: {
-    color: "#e74c3c",
+    color: Colors.error,
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: "500",
+    marginTop: 6,
   },
 });

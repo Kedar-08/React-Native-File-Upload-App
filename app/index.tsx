@@ -1,6 +1,8 @@
 import { Button, InputField, LoadingSpinner } from "@/components/ui";
+import { Colors } from "@/constants/theme";
 import { isLoggedIn, login } from "@/services";
 import { router } from "expo-router";
+import { Formik } from "formik";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -11,11 +13,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Yup from "yup";
+
+const loginSchema = Yup.object().shape({
+  email: Yup.string()
+    .email("Invalid email format")
+    .required("Email is required"),
+  password: Yup.string()
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
+});
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   // Check if user is already logged in
@@ -36,15 +45,9 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleLogin() {
-    if (!email.trim() || !password) {
-      Alert.alert("Error", "Please enter email and password");
-      return;
-    }
-
-    setLoading(true);
+  async function handleLogin(values: { email: string; password: string }) {
     try {
-      const result = await login(email, password);
+      const result = await login(values.email, values.password);
 
       if (result.success) {
         router.replace("/dashboard");
@@ -53,8 +56,6 @@ export default function LoginScreen() {
       }
     } catch (error) {
       Alert.alert("Error", "An unexpected error occurred");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -77,32 +78,57 @@ export default function LoginScreen() {
           <Text style={styles.subtitle}>Sign in to continue</Text>
         </View>
 
-        <View style={styles.form}>
-          <InputField
-            label="Email"
-            placeholder="Enter your email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+        <Formik
+          initialValues={{ email: "", password: "" }}
+          validationSchema={loginSchema}
+          onSubmit={handleLogin}
+        >
+          {({
+            handleChange,
+            handleBlur,
+            handleSubmit,
+            values,
+            errors,
+            touched,
+            isSubmitting,
+          }) => (
+            <View style={styles.form}>
+              <InputField
+                label="Email"
+                placeholder="Enter your email"
+                value={values.email}
+                onChangeText={handleChange("email")}
+                onBlur={handleBlur("email")}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                error={touched.email && errors.email ? errors.email : undefined}
+              />
 
-          <InputField
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+              <InputField
+                label="Password"
+                placeholder="Enter your password"
+                value={values.password}
+                onChangeText={handleChange("password")}
+                onBlur={handleBlur("password")}
+                secureTextEntry
+                error={
+                  touched.password && errors.password
+                    ? errors.password
+                    : undefined
+                }
+              />
 
-          <Button
-            title="Sign In"
-            onPress={handleLogin}
-            loading={loading}
-            style={styles.loginButton}
-          />
-        </View>
+              <Button
+                title="Sign In"
+                onPress={handleSubmit}
+                loading={isSubmitting}
+                disabled={isSubmitting}
+                style={styles.loginButton}
+              />
+            </View>
+          )}
+        </Formik>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
@@ -118,7 +144,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: Colors.background,
   },
   content: {
     flex: 1,
@@ -127,43 +153,41 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 48,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 32,
+    fontWeight: "800",
+    color: Colors.textPrimary,
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: Colors.textSecondary,
   },
   form: {
-    backgroundColor: "#fff",
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: Colors.backgroundWhite,
+    padding: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   loginButton: {
-    marginTop: 8,
+    marginTop: 12,
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 24,
+    marginTop: 32,
   },
   footerText: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
   linkText: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontWeight: "600",
+    fontSize: 15,
+    color: Colors.primary,
+    fontWeight: "700",
   },
 });

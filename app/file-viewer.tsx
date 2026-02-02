@@ -1,4 +1,5 @@
 import { Button, LoadingSpinner } from "@/components/ui";
+import { Colors } from "@/constants/theme";
 import {
   deleteFile,
   formatTimestamp,
@@ -131,7 +132,7 @@ export default function FileViewerScreen() {
           <Ionicons
             name={getFileIcon(file.fileType)}
             size={64}
-            color="#007AFF"
+            color={Colors.primary}
           />
         </View>
 
@@ -201,72 +202,73 @@ export default function FileViewerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: Colors.background,
   },
   content: {
     padding: 24,
     alignItems: "center",
   },
   iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    backgroundColor: "#f0f7ff",
+    width: 100,
+    height: 100,
+    borderRadius: 28,
+    backgroundColor: Colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
-    marginTop: 20,
+    marginTop: 24,
   },
   fileName: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 22,
+    fontWeight: "800",
+    color: Colors.textPrimary,
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 28,
+    letterSpacing: -0.3,
   },
   detailsCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: Colors.backgroundWhite,
+    borderRadius: 20,
+    padding: 24,
     width: "100%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   detailRow: {
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   detailLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 4,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.textMuted,
+    marginBottom: 6,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   detailValue: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 15,
+    fontWeight: "500",
+    color: Colors.textPrimary,
   },
   pathText: {
     fontSize: 12,
-    color: "#666",
+    color: Colors.textSecondary,
+    fontFamily: "monospace",
   },
   divider: {
     height: 1,
-    backgroundColor: "#eee",
+    backgroundColor: Colors.borderLight,
   },
   actions: {
     width: "100%",
-    marginTop: 24,
+    marginTop: 28,
   },
   actionButton: {
-    marginBottom: 12,
+    marginBottom: 14,
   },
   errorText: {
     fontSize: 16,
-    color: "#e74c3c",
+    color: Colors.error,
     textAlign: "center",
     marginTop: 40,
   },

@@ -1,7 +1,9 @@
 import { Button, InputField } from "@/components/ui";
+import { Colors } from "@/constants/theme";
 import { signup } from "@/services";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import { Formik } from "formik";
+import React from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,33 +14,28 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Yup from "yup";
+
+const signupSchema = Yup.object().shape({
+  email: Yup.string()
+    .email("Invalid email format")
+    .required("Email is required"),
+  password: Yup.string()
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
+  confirmPassword: Yup.string()
+    .oneOf([Yup.ref("password")], "Passwords must match")
+    .required("Please confirm your password"),
+});
 
 export default function SignupScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleSignup() {
-    // Validation
-    if (!email.trim() || !password || !confirmPassword) {
-      Alert.alert("Error", "Please fill in all fields");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
-      return;
-    }
-
-    setLoading(true);
+  async function handleSignup(values: {
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }) {
     try {
-      const result = await signup(email, password);
+      const result = await signup(values.email, values.password);
 
       if (result.success) {
         Alert.alert("Success", "Account created successfully!", [
@@ -49,8 +46,6 @@ export default function SignupScreen() {
       }
     } catch (error) {
       Alert.alert("Error", "An unexpected error occurred");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -73,40 +68,73 @@ export default function SignupScreen() {
             <Text style={styles.subtitle}>Sign up to get started</Text>
           </View>
 
-          <View style={styles.form}>
-            <InputField
-              label="Email"
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+          <Formik
+            initialValues={{ email: "", password: "", confirmPassword: "" }}
+            validationSchema={signupSchema}
+            onSubmit={handleSignup}
+          >
+            {({
+              handleChange,
+              handleBlur,
+              handleSubmit,
+              values,
+              errors,
+              touched,
+              isSubmitting,
+            }) => (
+              <View style={styles.form}>
+                <InputField
+                  label="Email"
+                  placeholder="Enter your email"
+                  value={values.email}
+                  onChangeText={handleChange("email")}
+                  onBlur={handleBlur("email")}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={
+                    touched.email && errors.email ? errors.email : undefined
+                  }
+                />
 
-            <InputField
-              label="Password"
-              placeholder="Create a password (min 6 characters)"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+                <InputField
+                  label="Password"
+                  placeholder="Create a password (min 6 characters)"
+                  value={values.password}
+                  onChangeText={handleChange("password")}
+                  onBlur={handleBlur("password")}
+                  secureTextEntry
+                  error={
+                    touched.password && errors.password
+                      ? errors.password
+                      : undefined
+                  }
+                />
 
-            <InputField
-              label="Confirm Password"
-              placeholder="Confirm your password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
+                <InputField
+                  label="Confirm Password"
+                  placeholder="Confirm your password"
+                  value={values.confirmPassword}
+                  onChangeText={handleChange("confirmPassword")}
+                  onBlur={handleBlur("confirmPassword")}
+                  secureTextEntry
+                  error={
+                    touched.confirmPassword && errors.confirmPassword
+                      ? errors.confirmPassword
+                      : undefined
+                  }
+                />
 
-            <Button
-              title="Create Account"
-              onPress={handleSignup}
-              loading={loading}
-              style={styles.signupButton}
-            />
-          </View>
+                <Button
+                  title="Create Account"
+                  onPress={handleSubmit}
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                  style={styles.signupButton}
+                />
+              </View>
+            )}
+          </Formik>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
@@ -123,7 +151,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -136,43 +164,41 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 48,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 32,
+    fontWeight: "800",
+    color: Colors.textPrimary,
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: Colors.textSecondary,
   },
   form: {
-    backgroundColor: "#fff",
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: Colors.backgroundWhite,
+    padding: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   signupButton: {
-    marginTop: 8,
+    marginTop: 12,
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 24,
+    marginTop: 32,
   },
   footerText: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
   linkText: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontWeight: "600",
+    fontSize: 15,
+    color: Colors.primary,
+    fontWeight: "700",
   },
 });
