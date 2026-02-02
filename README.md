@@ -1,50 +1,79 @@
-# Welcome to your Expo app 👋
+# React Native File Upload App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A simple Expo-based React Native app for uploading, viewing and managing files from a device. This project demonstrates a small production-like flow with authentication, file picking, local storage and a dashboard UI.
 
-## Get started
+**Key features**
 
-1. Install dependencies
+- Upload files from device storage using a file picker
+- Preview and view uploaded files in-app (images, documents)
+- Download or share files from the app
+- Authentication flow (signup / login) with token storage
+- Simple dashboard listing uploaded files with metadata
+- Local persistence using SQLite for file metadata
 
-   ```bash
-   npm install
-   ```
+**Tech stack (with versions)**
 
-2. Start the app
+- Expo: ~54.0.33
+- React: 19.1.0
+- React Native: 0.81.5
+- Expo Router: ~6.0.23
+- TypeScript: ~5.9.2 (dev)
+- Formik: ^2.4.9
+- Yup: ^1.7.1
+- Expo packages: expo-file-system ~19.0.21, expo-document-picker ~14.0.8, expo-secure-store ~15.0.8, expo-sqlite ~16.0.10
 
-   ```bash
-   npx expo start
-   ```
+See `package.json` for the full list of dependencies and exact versions.
 
-In the output, you'll find options to open the app in a
+## Getting started (development)
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+1. Install repository dependencies
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Start the Expo development server
 
-## Learn more
+```bash
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+3. Run the app
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Android emulator or device (recommended dev-build for native modules):
 
-## Join the community
+```bash
+npx expo run:android
+```
 
-Join our community of developers creating universal apps.
+- Or open in Expo Go from the Metro output QR code (limited native support).
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## USB -> Wireless Android ADB (optional)
+
+If you want to run on a physical Android device over Wi‑Fi, first connect via USB and enable TCP mode:
+
+```bash
+# connect device via USB and verify
+adb devices
+# enable TCP mode on port 5555
+adb tcpip 5555
+# find device IP (on-device or via adb shell)
+adb shell ip -f inet addr show wlan0
+# disconnect USB and connect over network
+adb connect <device-ip>:5555
+adb devices
+```
+
+## Project structure
+
+- `app/` — application routes and screens
+- `components/` — reusable UI components
+- `services/` — network, auth and file services
+- `storage/` — local DB and token storage
+
+## Notes
+
+-- This project targets Android only and uses file-based routing from `expo-router` — edit files inside `app/` to add or change screens.
+-- For native modules or working with device file APIs, prefer running on an Android emulator/device or a development build rather than Expo Go.
+
+---
