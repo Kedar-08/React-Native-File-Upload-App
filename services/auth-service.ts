@@ -13,6 +13,7 @@ export interface AuthResult {
   message: string;
   user?: StoredUser;
   token?: string;
+  field?: "email" | "password";
 }
 
 // Generate a simple auth token
@@ -30,17 +31,26 @@ export async function signup(
   try {
     // Validate inputs
     if (!email || !password) {
-      return { success: false, message: "Email and password are required" };
+      return {
+        success: false,
+        message: "Email and password are required",
+        field: !email ? "email" : "password",
+      };
     }
 
     if (!email.includes("@")) {
-      return { success: false, message: "Please enter a valid email" };
+      return {
+        success: false,
+        message: "Please enter a valid email",
+        field: "email",
+      };
     }
 
     if (password.length < 6) {
       return {
         success: false,
         message: "Password must be at least 6 characters",
+        field: "password",
       };
     }
 
@@ -83,12 +93,12 @@ export async function login(
     const user = await findUserByEmail(email.toLowerCase().trim());
 
     if (!user) {
-      return { success: false, message: "Invalid email or password" };
+      return { success: false, message: "Invalid email", field: "email" };
     }
 
     // Verify password
     if (!verifyPassword(password, user.password)) {
-      return { success: false, message: "Invalid email or password" };
+      return { success: false, message: "Invalid password", field: "password" };
     }
 
     // Generate token

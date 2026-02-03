@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import { Formik } from "formik";
 import React from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -29,23 +28,30 @@ const signupSchema = Yup.object().shape({
 });
 
 export default function SignupScreen() {
-  async function handleSignup(values: {
-    email: string;
-    password: string;
-    confirmPassword: string;
-  }) {
+  async function handleSignup(
+    values: {
+      email: string;
+      password: string;
+      confirmPassword: string;
+    },
+    { setErrors }: any,
+  ) {
     try {
       const result = await signup(values.email, values.password);
 
       if (result.success) {
-        Alert.alert("Success", "Account created successfully!", [
-          { text: "OK", onPress: () => router.replace("/dashboard") },
-        ]);
+        router.replace("/dashboard");
       } else {
-        Alert.alert("Signup Failed", result.message);
+        if (result.field === "email") {
+          setErrors({ email: result.message });
+        } else if (result.field === "password") {
+          setErrors({ password: result.message });
+        } else {
+          setErrors({ email: result.message });
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "An unexpected error occurred");
+      setErrors({ email: "An unexpected error occurred" });
     }
   }
 

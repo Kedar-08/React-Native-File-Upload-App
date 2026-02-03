@@ -1,4 +1,10 @@
-import { Button, FileItem, LoadingSpinner } from "@/components/ui";
+import {
+  Button,
+  ConfirmationModal,
+  FileItem,
+  LoadingSpinner,
+  Toast,
+} from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import {
   getAllFiles,
@@ -13,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -28,6 +33,12 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as "success" | "error",
+  });
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Check auth and load files on mount
   useEffect(() => {
@@ -67,7 +78,11 @@ export default function DashboardScreen() {
       setFiles(allFiles);
     } catch (error) {
       console.error("Failed to load files:", error);
-      Alert.alert("Error", "Failed to load files");
+      setToast({
+        visible: true,
+        message: "Failed to load files",
+        type: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -84,8 +99,12 @@ export default function DashboardScreen() {
     try {
       const user = await getLoggedInUser();
       if (!user) {
-        Alert.alert("Error", "Please login again");
-        router.replace("/");
+        setToast({
+          visible: true,
+          message: "Please login again",
+          type: "error",
+        });
+        setTimeout(() => router.replace("/"), 2000);
         return;
       }
 
@@ -101,10 +120,18 @@ export default function DashboardScreen() {
       // Reload files list
       await loadFiles();
 
-      Alert.alert("Success", "File uploaded successfully!");
+      setToast({
+        visible: true,
+        message: "File uploaded successfully!",
+        type: "success",
+      });
     } catch (error) {
       console.error("Upload error:", error);
-      Alert.alert("Error", "Failed to upload file");
+      setToast({
+        visible: true,
+        message: "Failed to upload file",
+        type: "error",
+      });
     } finally {
       setUploading(false);
     }
@@ -118,17 +145,13 @@ export default function DashboardScreen() {
   }
 
   async function handleLogout() {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/");
-        },
-      },
-    ]);
+    setShowLogoutModal(true);
+  }
+
+  async function confirmLogout() {
+    setShowLogoutModal(false);
+    await logout();
+    router.replace("/");
   }
 
   if (loading) {
@@ -137,6 +160,24 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast({ ...toast, visible: false })}
+      />
+
+      <ConfirmationModal
+        visible={showLogoutModal}
+        title="Logout"
+        message="Are you sure you want to logout? You'll need to sign in again to access your files."
+        confirmText="Logout"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutModal(false)}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <View>

@@ -1,4 +1,9 @@
-import { Button, LoadingSpinner } from "@/components/ui";
+import {
+  Button,
+  ConfirmationModal,
+  LoadingSpinner,
+  Toast,
+} from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import {
   deleteFile,
@@ -10,7 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function FileViewerScreen() {
   const { fileId } = useLocalSearchParams<{ fileId: string }>();
@@ -18,6 +23,12 @@ export default function FileViewerScreen() {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as "success" | "error",
+  });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     loadFile();
@@ -25,7 +36,6 @@ export default function FileViewerScreen() {
 
   async function loadFile() {
     if (!fileId) {
-      Alert.alert("Error", "File not found");
       router.back();
       return;
     }
@@ -33,14 +43,12 @@ export default function FileViewerScreen() {
     try {
       const fileData = await getFileById(parseInt(fileId));
       if (!fileData) {
-        Alert.alert("Error", "File not found");
         router.back();
         return;
       }
       setFile(fileData);
     } catch (error) {
       console.error("Failed to load file:", error);
-      Alert.alert("Error", "Failed to load file details");
       router.back();
     } finally {
       setLoading(false);
@@ -55,10 +63,11 @@ export default function FileViewerScreen() {
       await openFile(file);
     } catch (error) {
       console.error("Failed to open file:", error);
-      Alert.alert(
-        "Error",
-        "Failed to open file. The file may not exist or cannot be opened on this device.",
-      );
+      setToast({
+        visible: true,
+        message: "Failed to open file. It may not exist or cannot be opened.",
+        type: "error",
+      });
     } finally {
       setOpening(false);
     }
@@ -66,31 +75,25 @@ export default function FileViewerScreen() {
 
   async function handleDelete() {
     if (!file) return;
+    setShowDeleteModal(true);
+  }
 
-    Alert.alert(
-      "Delete File",
-      `Are you sure you want to delete "${file.fileName}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await deleteFile(file.id);
-              Alert.alert("Success", "File deleted successfully", [
-                { text: "OK", onPress: () => router.back() },
-              ]);
-            } catch (error) {
-              console.error("Failed to delete file:", error);
-              Alert.alert("Error", "Failed to delete file");
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    );
+  async function confirmDelete() {
+    if (!file) return;
+    setShowDeleteModal(false);
+    setDeleting(true);
+    try {
+      await deleteFile(file.id);
+      router.back();
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      setToast({
+        visible: true,
+        message: "Failed to delete file",
+        type: "error",
+      });
+      setDeleting(false);
+    }
   }
 
   function getFileIcon(fileType: string): keyof typeof Ionicons.glyphMap {
@@ -126,6 +129,24 @@ export default function FileViewerScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast({ ...toast, visible: false })}
+      />
+
+      <ConfirmationModal
+        visible={showDeleteModal}
+        title="Delete File"
+        message={`Are you sure you want to delete "${file.fileName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteModal(false)}
+      />
+
       <View style={styles.content}>
         {/* File Icon */}
         <View style={styles.iconContainer}>

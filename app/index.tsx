@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import { Formik } from "formik";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -45,17 +44,26 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleLogin(values: { email: string; password: string }) {
+  async function handleLogin(
+    values: { email: string; password: string },
+    { setErrors }: any,
+  ) {
     try {
       const result = await login(values.email, values.password);
 
       if (result.success) {
         router.replace("/dashboard");
       } else {
-        Alert.alert("Login Failed", result.message);
+        if (result.field === "email") {
+          setErrors({ email: result.message });
+        } else if (result.field === "password") {
+          setErrors({ password: result.message });
+        } else {
+          setErrors({ password: result.message || "Invalid credentials" });
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "An unexpected error occurred");
+      setErrors({ password: "An unexpected error occurred" });
     }
   }
 
