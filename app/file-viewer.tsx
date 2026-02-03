@@ -1,6 +1,7 @@
 import {
   Button,
   ConfirmationModal,
+  InputField,
   LoadingSpinner,
   Toast,
 } from "@/components/ui";
@@ -9,13 +10,23 @@ import {
   deleteFile,
   formatTimestamp,
   getFileById,
+  getFileIcon,
   openFile,
+  validateIndianMobileNumber,
   type FileMetadata,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function FileViewerScreen() {
   const { fileId } = useLocalSearchParams<{ fileId: string }>();
@@ -23,6 +34,10 @@ export default function FileViewerScreen() {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [sending, setSending] = useState(false);
+  const [mobileError, setMobileError] = useState("");
   const [toast, setToast] = useState({
     visible: false,
     message: "",
@@ -73,7 +88,7 @@ export default function FileViewerScreen() {
     }
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!file) return;
     setShowDeleteModal(true);
   }
@@ -96,24 +111,57 @@ export default function FileViewerScreen() {
     }
   }
 
-  function getFileIcon(fileType: string): keyof typeof Ionicons.glyphMap {
-    if (fileType.startsWith("image/")) return "image";
-    if (fileType.startsWith("video/")) return "videocam";
-    if (fileType.startsWith("audio/")) return "musical-notes";
-    if (fileType.includes("pdf")) return "document-text";
-    if (fileType.includes("word") || fileType.includes("document"))
-      return "document";
-    if (fileType.includes("sheet") || fileType.includes("excel")) return "grid";
-    if (fileType.includes("presentation") || fileType.includes("powerpoint"))
-      return "easel";
-    if (
-      fileType.includes("zip") ||
-      fileType.includes("rar") ||
-      fileType.includes("7z")
-    )
-      return "archive";
-    return "document";
+  function handleSendPress() {
+    setShowSendModal(true);
+    setMobileNumber("");
+    setMobileError("");
   }
+
+  async function handleSendFile() {
+    const validation = validateIndianMobileNumber(mobileNumber);
+    if (!validation.valid) {
+      setMobileError(validation.error);
+      return;
+    }
+
+    setSending(true);
+    try {
+      // Simulate sending with a delay
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Show success message
+      setToast({
+        visible: true,
+        message: `File sent successfully to ${mobileNumber}`,
+        type: "success",
+      });
+
+      // Close modal and reset
+      setShowSendModal(false);
+      setMobileNumber("");
+      setMobileError("");
+    } catch (error) {
+      console.error("Failed to send file:", error);
+      setToast({
+        visible: true,
+        message: "Failed to send file",
+        type: "error",
+      });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function closeSendModal() {
+    if (!sending) {
+      setShowSendModal(false);
+      setMobileNumber("");
+      setMobileError("");
+    }
+  }
+
+  // Compute validation once to avoid multiple calls in render
+  const isNumberValid = validateIndianMobileNumber(mobileNumber).valid;
 
   if (loading) {
     return <LoadingSpinner message="Loading file details..." />;
@@ -128,95 +176,182 @@ export default function FileViewerScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        type={toast.type}
-        onDismiss={() => setToast({ ...toast, visible: false })}
-      />
+    <>
+      <ScrollView style={styles.container}>
+        <Toast
+          visible={toast.visible}
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast({ ...toast, visible: false })}
+        />
 
-      <ConfirmationModal
-        visible={showDeleteModal}
-        title="Delete File"
-        message={`Are you sure you want to delete "${file.fileName}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        type="danger"
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteModal(false)}
-      />
+        <ConfirmationModal
+          visible={showDeleteModal}
+          title="Delete File"
+          message={`Are you sure you want to delete "${file.fileName}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDelete}
+          onCancel={() => setShowDeleteModal(false)}
+        />
 
-      <View style={styles.content}>
-        {/* File Icon */}
-        <View style={styles.iconContainer}>
-          <Ionicons
-            name={getFileIcon(file.fileType)}
-            size={64}
-            color={Colors.primary}
-          />
+        <View style={styles.content}>
+          {/* File Icon */}
+          <View style={styles.iconContainer}>
+            <Ionicons
+              name={getFileIcon(file.fileType)}
+              size={64}
+              color={Colors.primary}
+            />
+          </View>
+
+          {/* File Name */}
+          <Text style={styles.fileName}>{file.fileName}</Text>
+
+          {/* File Details */}
+          <View style={styles.detailsCard}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>File Type</Text>
+              <Text style={styles.detailValue}>{file.fileType}</Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Uploaded By</Text>
+              <Text style={styles.detailValue}>{file.uploadedByEmail}</Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Upload Date</Text>
+              <Text style={styles.detailValue}>
+                {formatTimestamp(file.timestamp)}
+              </Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Local Path</Text>
+              <Text
+                style={[styles.detailValue, styles.pathText]}
+                numberOfLines={2}
+              >
+                {file.localFilePath}
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actions}>
+            <Button
+              title={opening ? "Opening..." : "Open File"}
+              onPress={handleOpen}
+              loading={opening}
+              disabled={opening || deleting || sending}
+              style={styles.actionButton}
+            />
+
+            <Button
+              title="Send File"
+              onPress={handleSendPress}
+              disabled={opening || deleting || sending}
+              style={styles.actionButton}
+            />
+
+            <Button
+              title={deleting ? "Deleting..." : "Delete File"}
+              onPress={handleDelete}
+              variant="danger"
+              loading={deleting}
+              disabled={opening || deleting || sending}
+              style={styles.actionButton}
+            />
+          </View>
         </View>
+      </ScrollView>
 
-        {/* File Name */}
-        <Text style={styles.fileName}>{file.fileName}</Text>
+      {/* Send File Modal */}
+      <Modal
+        visible={showSendModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeSendModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Send File</Text>
+              <TouchableOpacity
+                onPress={closeSendModal}
+                disabled={sending}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
 
-        {/* File Details */}
-        <View style={styles.detailsCard}>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>File Type</Text>
-            <Text style={styles.detailValue}>{file.fileType}</Text>
-          </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalLabel}>
+                Enter the recipient's Indian mobile number
+              </Text>
 
-          <View style={styles.divider} />
+              <InputField
+                label="Mobile Number"
+                placeholder="Enter 10-digit number (e.g., 9876543210)"
+                value={mobileNumber}
+                onChangeText={(text) => {
+                  setMobileNumber(text);
+                  const validation = validateIndianMobileNumber(text);
+                  setMobileError(
+                    !validation.valid && text.length > 0
+                      ? validation.error
+                      : "",
+                  );
+                }}
+                keyboardType="phone-pad"
+                editable={!sending}
+                maxLength={10}
+                error={mobileError}
+              />
 
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Uploaded By</Text>
-            <Text style={styles.detailValue}>{file.uploadedByEmail}</Text>
-          </View>
+              {sending && (
+                <View style={styles.sendingContainer}>
+                  <LoadingSpinner message="Sending file..." />
+                </View>
+              )}
+            </View>
 
-          <View style={styles.divider} />
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Upload Date</Text>
-            <Text style={styles.detailValue}>
-              {formatTimestamp(file.timestamp)}
-            </Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Local Path</Text>
-            <Text
-              style={[styles.detailValue, styles.pathText]}
-              numberOfLines={2}
-            >
-              {file.localFilePath}
-            </Text>
+            <View style={styles.modalFooter}>
+              <Button
+                title="Cancel"
+                onPress={closeSendModal}
+                variant="secondary"
+                disabled={sending}
+                style={styles.cancelButton}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!isNumberValid || sending) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSendFile}
+                disabled={!isNumberValid || sending}
+              >
+                {sending ? (
+                  <ActivityIndicator color={Colors.textWhite} size="small" />
+                ) : (
+                  <Ionicons name="send" size={20} color={Colors.textWhite} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <Button
-            title={opening ? "Opening..." : "Open File"}
-            onPress={handleOpen}
-            loading={opening}
-            disabled={opening || deleting}
-            style={styles.actionButton}
-          />
-
-          <Button
-            title={deleting ? "Deleting..." : "Delete File"}
-            onPress={handleDelete}
-            variant="danger"
-            loading={deleting}
-            disabled={opening || deleting}
-            style={styles.actionButton}
-          />
-        </View>
-      </View>
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -292,5 +427,70 @@ const styles = StyleSheet.create({
     color: Colors.error,
     textAlign: "center",
     marginTop: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: Colors.backgroundWhite,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 24,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  modalBody: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 16,
+    fontWeight: "500",
+  },
+  sendingContainer: {
+    marginTop: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+  },
+  modalFooter: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  cancelButton: {
+    flex: 1,
+  },
+  sendButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    backgroundColor: Colors.textMuted,
+    opacity: 0.5,
   },
 });

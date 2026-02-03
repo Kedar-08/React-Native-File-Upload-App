@@ -1,5 +1,5 @@
 import { Colors } from "@/constants/theme";
-import { type FileMetadata, formatTimestamp } from "@/services";
+import { formatTimestamp, getFileIcon, type FileMetadata } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -10,26 +10,6 @@ interface FileItemProps {
 }
 
 export function FileItem({ file, onPress }: FileItemProps) {
-  const getFileIcon = (fileType: string): keyof typeof Ionicons.glyphMap => {
-    if (fileType.startsWith("image/")) return "image-outline";
-    if (fileType.startsWith("video/")) return "videocam-outline";
-    if (fileType.startsWith("audio/")) return "musical-notes-outline";
-    if (fileType.includes("pdf")) return "document-text-outline";
-    if (fileType.includes("word") || fileType.includes("document"))
-      return "document-outline";
-    if (fileType.includes("sheet") || fileType.includes("excel"))
-      return "grid-outline";
-    if (fileType.includes("presentation") || fileType.includes("powerpoint"))
-      return "easel-outline";
-    if (
-      fileType.includes("zip") ||
-      fileType.includes("rar") ||
-      fileType.includes("7z")
-    )
-      return "archive-outline";
-    return "document-outline";
-  };
-
   const getFileTypeLabel = (fileType: string): string => {
     const parts = fileType.split("/");
     if (parts.length > 1) {
@@ -46,7 +26,7 @@ export function FileItem({ file, onPress }: FileItemProps) {
     >
       <View style={styles.iconContainer}>
         <Ionicons
-          name={getFileIcon(file.fileType)}
+          name={getFileIcon(file.fileType, "outline")}
           size={28}
           color={Colors.primary}
         />

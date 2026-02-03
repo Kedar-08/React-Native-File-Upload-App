@@ -6,12 +6,7 @@ import {
   saveToken,
   type StoredUser,
 } from "@/storage";
-import {
-  createUser,
-  findUserByEmail,
-  updateUserPassword,
-  verifyPassword,
-} from "./db-service";
+import { createUser, findUserByEmail, verifyPassword } from "./db-service";
 
 export interface AuthResult {
   success: boolean;
@@ -102,14 +97,8 @@ export async function login(
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, user.password);
-    if (!isValidPassword) {
+    if (!verifyPassword(password, user.password)) {
       return { success: false, message: "Invalid password", field: "password" };
-    }
-
-    // Migrate legacy plain-text password to hashed password
-    if (!user.password.startsWith("$2")) {
-      await updateUserPassword(user.id, password);
     }
 
     // Generate token
