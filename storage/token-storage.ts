@@ -8,14 +8,40 @@ export interface StoredUser {
   email: string;
 }
 
-// Save auth token securely
-export async function saveToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+interface TokenData {
+  token: string;
+  expiresAt: number; // Unix timestamp
 }
 
-// Get stored auth token
+// Save auth token with expiry
+export async function saveToken(
+  token: string,
+  expiryDays: number = 7,
+): Promise<void> {
+  const expiresAt = Date.now() + expiryDays * 24 * 60 * 60 * 1000;
+  const tokenData: TokenData = { token, expiresAt };
+  await SecureStore.setItemAsync(TOKEN_KEY, JSON.stringify(tokenData));
+}
+
+// Get stored auth token (returns null if expired)
 export async function getToken(): Promise<string | null> {
-  return await SecureStore.getItemAsync(TOKEN_KEY);
+  const tokenDataJson = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!tokenDataJson) return null;
+
+  try {
+    const tokenData: TokenData = JSON.parse(tokenDataJson);
+
+    // Check if token is expired
+    if (Date.now() > tokenData.expiresAt) {
+      await deleteToken(); // Clean up expired token
+      return null;
+    }
+
+    return tokenData.token;
+  } catch {
+    // If parsing fails, it might be an old format token, return it but consider migrating
+    return tokenDataJson;
+  }
 }
 
 // Delete auth token (logout)

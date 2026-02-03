@@ -1,4 +1,5 @@
 import { getDatabase } from "@/storage";
+import * as bcrypt from "bcryptjs";
 
 export interface User {
   id: number;
@@ -24,10 +25,13 @@ export async function createUser(
     throw new Error("User with this email already exists");
   }
 
+  // Hash password before storing
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   // Insert new user
   const result = await db.runAsync(
     "INSERT INTO users (email, password) VALUES (?, ?)",
-    [email, password],
+    [email, hashedPassword],
   );
 
   const newUser = await db.getFirstAsync<User>(
@@ -66,10 +70,31 @@ export async function findUserById(id: number): Promise<User | null> {
   return user || null;
 }
 
-// Verify password (simple comparison - in production use hashing)
-export function verifyPassword(
+// Verify password using bcrypt (with fallback for legacy plain-text passwords)
+export async function verifyPassword(
   inputPassword: string,
   storedPassword: string,
-): boolean {
+): Promise<boolean> {
+  // Check if stored password is hashed (bcrypt hashes start with $2a$, $2b$, or $2y$)
+  if (storedPassword.startsWith("$2")) {
+    return await bcrypt.compare(inputPassword, storedPassword);
+  }
+
+  // Fallback for legacy plain-text passwords (for existing users)
+  // In production, you'd want to migrate these by rehashing on successful login
   return inputPassword === storedPassword;
+}
+
+// Update user password (used for migrating legacy plain-text passwords)
+export async function updateUserPassword(
+  userId: number,
+  newPassword: string,
+): Promise<void> {
+  const db = await getDatabase();
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  await db.runAsync("UPDATE users SET password = ? WHERE id = ?", [
+    hashedPassword,
+    userId,
+  ]);
 }
