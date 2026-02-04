@@ -12,7 +12,7 @@ import {
   isLoggedIn,
   logout,
   pickFile,
-  saveFile,
+  saveMultipleFiles,
   type FileMetadata,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
@@ -114,22 +114,44 @@ export default function DashboardScreen() {
         return;
       }
 
-      // Save the file
-      await saveFile(result, user.id, user.email);
+      // Save multiple files
+      const { saved, failed } = await saveMultipleFiles(
+        result,
+        user.id,
+        user.email,
+      );
 
       // Reload files list
       await loadFiles();
 
-      setToast({
-        visible: true,
-        message: "File uploaded successfully!",
-        type: "success",
-      });
+      // Show appropriate message based on results
+      if (saved.length > 0 && failed.length === 0) {
+        setToast({
+          visible: true,
+          message:
+            saved.length === 1
+              ? "File uploaded successfully!"
+              : `${saved.length} files uploaded successfully!`,
+          type: "success",
+        });
+      } else if (saved.length > 0 && failed.length > 0) {
+        setToast({
+          visible: true,
+          message: `${saved.length} file(s) uploaded. ${failed.length} failed: ${failed.join(", ")}`,
+          type: "success",
+        });
+      } else if (failed.length > 0) {
+        setToast({
+          visible: true,
+          message: `Failed to upload: ${failed.join(", ")}`,
+          type: "error",
+        });
+      }
     } catch (error) {
       console.error("Upload error:", error);
       setToast({
         visible: true,
-        message: "Failed to upload file",
+        message: "Failed to upload files",
         type: "error",
       });
     } finally {

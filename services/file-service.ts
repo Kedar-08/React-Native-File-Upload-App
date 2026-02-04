@@ -14,17 +14,83 @@ export interface FileMetadata {
   localFilePath: string;
 }
 
-// Pick a file using document picker
+// Pick one or more files using document picker
 export async function pickFile(): Promise<DocumentPicker.DocumentPickerResult> {
   const result = await DocumentPicker.getDocumentAsync({
     type: "*/*", // Allow all file types
     copyToCacheDirectory: true,
+    multiple: true, // Enable multiple file selection
   });
 
   return result;
 }
 
-// Save file to local storage and store metadata
+// Save multiple files to local storage and database
+export async function saveMultipleFiles(
+  pickerResult: DocumentPicker.DocumentPickerResult,
+  userId: number,
+  userEmail: string,
+): Promise<{ saved: FileMetadata[]; failed: string[] }> {
+  if (!pickerResult.assets) {
+    return { saved: [], failed: [] };
+  }
+
+  const saved: FileMetadata[] = [];
+  const failed: string[] = [];
+
+  // Create app's document directory if it doesn't exist
+  const uploadsDir = new Directory(Paths.document, "uploads");
+  if (!uploadsDir.exists) {
+    uploadsDir.create();
+  }
+
+  const db = await getDatabase();
+
+  // Process each file
+  for (const asset of pickerResult.assets) {
+    try {
+      const { uri, name, mimeType } = asset;
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const uniqueFileName = `${timestamp}_${name}`;
+      const destinationFile = new File(uploadsDir, uniqueFileName);
+      const localFilePath = destinationFile.uri;
+
+      // Copy file to app's document directory
+      const sourceFile = new File(uri);
+      sourceFile.copy(destinationFile);
+
+      // Determine file type
+      const fileType = mimeType || getFileTypeFromName(name);
+
+      // Save metadata to database
+      const result = await db.runAsync(
+        `INSERT INTO files (fileName, fileType, uploadedByEmail, uploadedByUserId, localFilePath)
+         VALUES (?, ?, ?, ?, ?)`,
+        [name, fileType, userEmail, userId, localFilePath],
+      );
+
+      // Get the saved file metadata
+      const savedFile = await db.getFirstAsync<FileMetadata>(
+        "SELECT * FROM files WHERE id = ?",
+        [result.lastInsertRowId],
+      );
+
+      if (savedFile) {
+        saved.push(savedFile);
+      } else {
+        failed.push(name);
+      }
+    } catch (error) {
+      const fileName = asset.name || "unknown";
+      console.error(`Failed to save file ${fileName}:`, error);
+      failed.push(fileName);
+    }
+  }
+
+  return { saved, failed };
+}
 export async function saveFile(
   pickerResult: DocumentPicker.DocumentPickerSuccessResult,
   userId: number,

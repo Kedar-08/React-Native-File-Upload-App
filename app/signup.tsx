@@ -1,6 +1,6 @@
 import { Button, InputField } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { signup } from "@/services";
+import { signup, validateIndianMobileNumber } from "@/services";
 import { router } from "expo-router";
 import { Formik } from "formik";
 import React from "react";
@@ -23,8 +23,22 @@ const signupSchema = Yup.object().shape({
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
   confirmPassword: Yup.string()
-    .oneOf([Yup.ref("password")], "Passwords must match")
-    .required("Please confirm your password"),
+    .required("Please confirm your password")
+    .test(
+      "passwords-match",
+      "Passwords must match",
+      function (confirmPassword) {
+        return (
+          (confirmPassword || "").trim() === (this.parent.password || "").trim()
+        );
+      },
+    ),
+  phoneNumber: Yup.string()
+    .required("Phone number is required")
+    .test("indian-mobile", "Invalid Indian mobile number", (value) => {
+      if (!value) return false;
+      return validateIndianMobileNumber(value).valid;
+    }),
 });
 
 export default function SignupScreen() {
@@ -33,11 +47,16 @@ export default function SignupScreen() {
       email: string;
       password: string;
       confirmPassword: string;
+      phoneNumber: string;
     },
     { setErrors }: any,
   ) {
     try {
-      const result = await signup(values.email, values.password);
+      const result = await signup(
+        values.email,
+        values.password.trim(),
+        values.phoneNumber,
+      );
 
       if (result.success) {
         router.replace("/dashboard");
@@ -75,7 +94,12 @@ export default function SignupScreen() {
           </View>
 
           <Formik
-            initialValues={{ email: "", password: "", confirmPassword: "" }}
+            initialValues={{
+              email: "",
+              password: "",
+              confirmPassword: "",
+              phoneNumber: "",
+            }}
             validationSchema={signupSchema}
             onSubmit={handleSignup}
           >
@@ -100,6 +124,21 @@ export default function SignupScreen() {
                   autoCorrect={false}
                   error={
                     touched.email && errors.email ? errors.email : undefined
+                  }
+                />
+
+                <InputField
+                  label="Phone Number"
+                  placeholder="Enter 10-digit Indian mobile number"
+                  value={values.phoneNumber}
+                  onChangeText={handleChange("phoneNumber")}
+                  onBlur={handleBlur("phoneNumber")}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  error={
+                    touched.phoneNumber && errors.phoneNumber
+                      ? errors.phoneNumber
+                      : undefined
                   }
                 />
 

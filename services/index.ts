@@ -22,6 +22,7 @@ export {
   openFile,
   pickFile,
   saveFile,
+  saveMultipleFiles,
   type FileMetadata,
 } from "./file-service";
 export { getFileIcon, validateIndianMobileNumber } from "./file-utils";

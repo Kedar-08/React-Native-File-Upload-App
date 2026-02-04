@@ -11,6 +11,7 @@ import {
   formatTimestamp,
   getFileById,
   getFileIcon,
+  getLoggedInUser,
   openFile,
   validateIndianMobileNumber,
   type FileMetadata,
@@ -38,6 +39,7 @@ export default function FileViewerScreen() {
   const [mobileNumber, setMobileNumber] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileError, setMobileError] = useState("");
+  const [senderPhone, setSenderPhone] = useState("");
   const [toast, setToast] = useState({
     visible: false,
     message: "",
@@ -47,7 +49,15 @@ export default function FileViewerScreen() {
 
   useEffect(() => {
     loadFile();
+    loadSenderPhone();
   }, [fileId]);
+
+  async function loadSenderPhone() {
+    const user = await getLoggedInUser();
+    if (user?.phoneNumber) {
+      setSenderPhone(user.phoneNumber);
+    }
+  }
 
   async function loadFile() {
     if (!fileId) {
@@ -295,12 +305,19 @@ export default function FileViewerScreen() {
             </View>
 
             <View style={styles.modalBody}>
+              {senderPhone && (
+                <View style={styles.senderInfo}>
+                  <Text style={styles.senderLabel}>From</Text>
+                  <Text style={styles.senderPhone}>{senderPhone}</Text>
+                </View>
+              )}
+
               <Text style={styles.modalLabel}>
                 Enter the recipient's Indian mobile number
               </Text>
 
               <InputField
-                label="Mobile Number"
+                label="Recipient Mobile Number"
                 placeholder="Enter 10-digit number (e.g., 9876543210)"
                 value={mobileNumber}
                 onChangeText={(text) => {
@@ -457,6 +474,25 @@ const styles = StyleSheet.create({
   modalBody: {
     paddingHorizontal: 24,
     paddingVertical: 24,
+  },
+  senderInfo: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+  },
+  senderLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  senderPhone: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.primary,
   },
   modalLabel: {
     fontSize: 14,

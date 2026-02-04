@@ -21,9 +21,17 @@ async function initializeTables(): Promise<void> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
+      phoneNumber TEXT,
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migration: Add phoneNumber column if it doesn't exist (for existing databases)
+  try {
+    await db.execAsync(`ALTER TABLE users ADD COLUMN phoneNumber TEXT;`);
+  } catch {
+    // Column already exists, ignore error
+  }
 
   // Create files table
   await db.execAsync(`

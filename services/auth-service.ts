@@ -27,14 +27,15 @@ function generateToken(userId: number, email: string): string {
 export async function signup(
   email: string,
   password: string,
+  phoneNumber: string,
 ): Promise<AuthResult> {
   try {
     // Validate inputs
-    if (!email || !password) {
+    if (!email || !password || !phoneNumber) {
       return {
         success: false,
-        message: "Email and password are required",
-        field: !email ? "email" : "password",
+        message: "Email, password, and phone number are required",
+        field: !email ? "email" : !password ? "password" : undefined,
       };
     }
 
@@ -55,13 +56,21 @@ export async function signup(
     }
 
     // Create user in database
-    const user = await createUser(email.toLowerCase().trim(), password);
+    const user = await createUser(
+      email.toLowerCase().trim(),
+      password,
+      phoneNumber,
+    );
 
     // Generate token
     const token = generateToken(user.id, user.email);
 
     // Store token and user info
-    const storedUser: StoredUser = { id: user.id, email: user.email };
+    const storedUser: StoredUser = {
+      id: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+    };
     await saveToken(token);
     await saveCurrentUser(storedUser);
 
@@ -105,7 +114,11 @@ export async function login(
     const token = generateToken(user.id, user.email);
 
     // Store token and user info
-    const storedUser: StoredUser = { id: user.id, email: user.email };
+    const storedUser: StoredUser = {
+      id: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber || "",
+    };
     await saveToken(token);
     await saveCurrentUser(storedUser);
 
