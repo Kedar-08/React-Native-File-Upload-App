@@ -27,15 +27,14 @@ function generateToken(userId: number, email: string): string {
 export async function signup(
   email: string,
   password: string,
-  phoneNumber: string,
 ): Promise<AuthResult> {
   try {
     // Validate inputs
-    if (!email || !password || !phoneNumber) {
+    if (!email || !password) {
       return {
         success: false,
-        message: "Email, password, and phone number are required",
-        field: !email ? "email" : !password ? "password" : undefined,
+        message: "Email and password are required",
+        field: !email ? "email" : "password",
       };
     }
 
@@ -56,11 +55,7 @@ export async function signup(
     }
 
     // Create user in database
-    const user = await createUser(
-      email.toLowerCase().trim(),
-      password,
-      phoneNumber,
-    );
+    const user = await createUser(email.toLowerCase().trim(), password);
 
     // Generate token
     const token = generateToken(user.id, user.email);
@@ -69,7 +64,6 @@ export async function signup(
     const storedUser: StoredUser = {
       id: user.id,
       email: user.email,
-      phoneNumber: user.phoneNumber,
     };
     await saveToken(token);
     await saveCurrentUser(storedUser);
@@ -117,7 +111,6 @@ export async function login(
     const storedUser: StoredUser = {
       id: user.id,
       email: user.email,
-      phoneNumber: user.phoneNumber || "",
     };
     await saveToken(token);
     await saveCurrentUser(storedUser);

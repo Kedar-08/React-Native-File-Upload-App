@@ -4,7 +4,6 @@ export interface User {
   id: number;
   email: string;
   password: string;
-  phoneNumber: string;
   createdAt: string;
 }
 
@@ -12,7 +11,6 @@ export interface User {
 export async function createUser(
   email: string,
   password: string,
-  phoneNumber: string,
 ): Promise<User> {
   const db = await getDatabase();
 
@@ -28,8 +26,8 @@ export async function createUser(
 
   // Insert new user
   const result = await db.runAsync(
-    "INSERT INTO users (email, password, phoneNumber) VALUES (?, ?, ?)",
-    [email, password, phoneNumber],
+    "INSERT INTO users (email, password) VALUES (?, ?)",
+    [email, password],
   );
 
   const newUser = await db.getFirstAsync<User>(

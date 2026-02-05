@@ -6,7 +6,6 @@ const USER_KEY = "current_user";
 export interface StoredUser {
   id: number;
   email: string;
-  phoneNumber: string;
 }
 
 interface TokenData {

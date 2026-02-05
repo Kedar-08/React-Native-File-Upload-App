@@ -35,7 +35,7 @@ export default function LoginScreen() {
     try {
       const loggedIn = await isLoggedIn();
       if (loggedIn) {
-        router.replace("/dashboard");
+        router.replace("/(tabs)/dashboard");
       }
     } catch (error) {
       console.log("Auth check error:", error);
@@ -52,7 +52,7 @@ export default function LoginScreen() {
       const result = await login(values.email, values.password.trim());
 
       if (result.success) {
-        router.replace("/dashboard");
+        router.replace("/(tabs)/dashboard");
       } else {
         if (result.field === "email") {
           setErrors({ email: result.message });

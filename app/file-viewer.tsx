@@ -13,7 +13,7 @@ import {
   getFileIcon,
   getLoggedInUser,
   openFile,
-  validateIndianMobileNumber,
+  validateEmail,
   type FileMetadata,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,10 +36,10 @@ export default function FileViewerScreen() {
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
-  const [mobileNumber, setMobileNumber] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
   const [sending, setSending] = useState(false);
-  const [mobileError, setMobileError] = useState("");
-  const [senderPhone, setSenderPhone] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [senderEmail, setSenderEmail] = useState("");
   const [toast, setToast] = useState({
     visible: false,
     message: "",
@@ -49,13 +49,13 @@ export default function FileViewerScreen() {
 
   useEffect(() => {
     loadFile();
-    loadSenderPhone();
+    loadSenderEmail();
   }, [fileId]);
 
-  async function loadSenderPhone() {
+  async function loadSenderEmail() {
     const user = await getLoggedInUser();
-    if (user?.phoneNumber) {
-      setSenderPhone(user.phoneNumber);
+    if (user?.email) {
+      setSenderEmail(user.email);
     }
   }
 
@@ -123,14 +123,14 @@ export default function FileViewerScreen() {
 
   function handleSendPress() {
     setShowSendModal(true);
-    setMobileNumber("");
-    setMobileError("");
+    setRecipientEmail("");
+    setEmailError("");
   }
 
   async function handleSendFile() {
-    const validation = validateIndianMobileNumber(mobileNumber);
+    const validation = validateEmail(recipientEmail);
     if (!validation.valid) {
-      setMobileError(validation.error);
+      setEmailError(validation.error);
       return;
     }
 
@@ -142,14 +142,14 @@ export default function FileViewerScreen() {
       // Show success message
       setToast({
         visible: true,
-        message: `File sent successfully to ${mobileNumber}`,
+        message: `File sent successfully to ${recipientEmail}`,
         type: "success",
       });
 
       // Close modal and reset
       setShowSendModal(false);
-      setMobileNumber("");
-      setMobileError("");
+      setRecipientEmail("");
+      setEmailError("");
     } catch (error) {
       console.error("Failed to send file:", error);
       setToast({
@@ -165,13 +165,13 @@ export default function FileViewerScreen() {
   function closeSendModal() {
     if (!sending) {
       setShowSendModal(false);
-      setMobileNumber("");
-      setMobileError("");
+      setRecipientEmail("");
+      setEmailError("");
     }
   }
 
   // Compute validation once to avoid multiple calls in render
-  const isNumberValid = validateIndianMobileNumber(mobileNumber).valid;
+  const isEmailValid = validateEmail(recipientEmail).valid;
 
   if (loading) {
     return <LoadingSpinner message="Loading file details..." />;
@@ -257,29 +257,47 @@ export default function FileViewerScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-            <Button
-              title={opening ? "Opening..." : "Open File"}
+            <TouchableOpacity
+              style={[styles.compactButton, styles.primaryButton]}
               onPress={handleOpen}
-              loading={opening}
               disabled={opening || deleting || sending}
-              style={styles.actionButton}
-            />
+              activeOpacity={0.7}
+            >
+              {opening ? (
+                <ActivityIndicator color={Colors.textWhite} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="open" size={20} color={Colors.textWhite} />
+                  <Text style={styles.compactButtonText}>Open</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-            <Button
-              title="Send File"
+            <TouchableOpacity
+              style={[styles.compactButton, styles.secondaryButton]}
               onPress={handleSendPress}
               disabled={opening || deleting || sending}
-              style={styles.actionButton}
-            />
+              activeOpacity={0.7}
+            >
+              <Ionicons name="send" size={20} color={Colors.primary} />
+              <Text style={styles.compactButtonTextSecondary}>Send</Text>
+            </TouchableOpacity>
 
-            <Button
-              title={deleting ? "Deleting..." : "Delete File"}
+            <TouchableOpacity
+              style={[styles.compactButton, styles.dangerButton]}
               onPress={handleDelete}
-              variant="danger"
-              loading={deleting}
               disabled={opening || deleting || sending}
-              style={styles.actionButton}
-            />
+              activeOpacity={0.7}
+            >
+              {deleting ? (
+                <ActivityIndicator color={Colors.textWhite} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="trash" size={20} color={Colors.textWhite} />
+                  <Text style={styles.compactButtonText}>Delete</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -305,34 +323,35 @@ export default function FileViewerScreen() {
             </View>
 
             <View style={styles.modalBody}>
-              {senderPhone && (
+              {senderEmail && (
                 <View style={styles.senderInfo}>
                   <Text style={styles.senderLabel}>From</Text>
-                  <Text style={styles.senderPhone}>{senderPhone}</Text>
+                  <Text style={styles.senderPhone}>{senderEmail}</Text>
                 </View>
               )}
 
               <Text style={styles.modalLabel}>
-                Enter the recipient's Indian mobile number
+                Enter recipient's email address
               </Text>
 
               <InputField
-                label="Recipient Mobile Number"
-                placeholder="Enter 10-digit number (e.g., 9876543210)"
-                value={mobileNumber}
+                label="Recipient Email"
+                placeholder="Enter email address"
+                value={recipientEmail}
                 onChangeText={(text) => {
-                  setMobileNumber(text);
-                  const validation = validateIndianMobileNumber(text);
-                  setMobileError(
+                  setRecipientEmail(text);
+                  const validation = validateEmail(text);
+                  setEmailError(
                     !validation.valid && text.length > 0
                       ? validation.error
                       : "",
                   );
                 }}
-                keyboardType="phone-pad"
+                keyboardType="email-address"
                 editable={!sending}
-                maxLength={10}
-                error={mobileError}
+                autoCapitalize="none"
+                autoCorrect={false}
+                error={emailError}
               />
 
               {sending && (
@@ -353,10 +372,10 @@ export default function FileViewerScreen() {
               <TouchableOpacity
                 style={[
                   styles.sendButton,
-                  (!isNumberValid || sending) && styles.sendButtonDisabled,
+                  (!isEmailValid || sending) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSendFile}
-                disabled={!isNumberValid || sending}
+                disabled={!isEmailValid || sending}
               >
                 {sending ? (
                   <ActivityIndicator color={Colors.textWhite} size="small" />
@@ -390,6 +409,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
     marginTop: 24,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
   },
   fileName: {
     fontSize: 22,
@@ -406,6 +430,11 @@ const styles = StyleSheet.create({
     width: "100%",
     borderWidth: 1,
     borderColor: Colors.borderLight,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
   },
   detailRow: {
     paddingVertical: 14,
@@ -435,9 +464,52 @@ const styles = StyleSheet.create({
   actions: {
     width: "100%",
     marginTop: 28,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "center",
+  },
+  compactButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    flex: 1,
+  },
+  primaryButton: {
+    backgroundColor: Colors.primary,
+  },
+  secondaryButton: {
+    backgroundColor: Colors.backgroundAccent,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  dangerButton: {
+    backgroundColor: Colors.error,
+  },
+  compactButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textWhite,
+  },
+  compactButtonTextSecondary: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.primary,
   },
   actionButton: {
-    marginBottom: 14,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   errorText: {
     fontSize: 16,

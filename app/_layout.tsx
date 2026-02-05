@@ -15,7 +15,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack>
-        {/* Login Screen - Initial Route */}
+        {/* Login & Signup Screens - Initial Routes */}
         <Stack.Screen
           name="index"
           options={{
@@ -23,7 +23,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Signup Screen */}
         <Stack.Screen
           name="signup"
           options={{
@@ -32,20 +31,21 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Dashboard Screen */}
+        {/* Main App with Bottom Tabs */}
         <Stack.Screen
-          name="dashboard"
+          name="(tabs)"
           options={{
             headerShown: false,
           }}
         />
 
-        {/* File Viewer Screen */}
+        {/* File Viewer Screen - Modal on top of tabs */}
         <Stack.Screen
           name="file-viewer"
           options={{
             title: "File Details",
             headerBackTitle: "Back",
+            presentation: "card",
           }}
         />
       </Stack>

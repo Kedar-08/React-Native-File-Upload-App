@@ -175,6 +175,20 @@ export async function getFileById(
   return file || null;
 }
 
+// Check if a file with the same name already exists
+export async function getFileByName(
+  fileName: string,
+): Promise<FileMetadata | null> {
+  const db = await getDatabase();
+
+  const file = await db.getFirstAsync<FileMetadata>(
+    "SELECT * FROM files WHERE fileName = ?",
+    [fileName],
+  );
+
+  return file || null;
+}
+
 // Open a file with the default app (Android only)
 export async function openFile(file: FileMetadata): Promise<void> {
   // Check if file exists

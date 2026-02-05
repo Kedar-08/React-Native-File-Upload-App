@@ -60,3 +60,30 @@ export function validateIndianMobileNumber(number: string): {
 
   return { valid: true, error: "" };
 }
+
+/**
+ * Validate email address format.
+ */
+export function validateEmail(email: string): {
+  valid: boolean;
+  error: string;
+} {
+  const trimmedEmail = email.trim();
+
+  if (!trimmedEmail) {
+    return {
+      valid: false,
+      error: "Email is required",
+    };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
+    return {
+      valid: false,
+      error: "Please enter a valid email address",
+    };
+  }
+
+  return { valid: true, error: "" };
+}

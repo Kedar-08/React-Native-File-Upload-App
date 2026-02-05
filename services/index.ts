@@ -18,6 +18,7 @@ export {
   formatTimestamp,
   getAllFiles,
   getFileById,
+  getFileByName,
   getFilesByUser,
   openFile,
   pickFile,
@@ -25,4 +26,8 @@ export {
   saveMultipleFiles,
   type FileMetadata,
 } from "./file-service";
-export { getFileIcon, validateIndianMobileNumber } from "./file-utils";
+export {
+  getFileIcon,
+  validateEmail,
+  validateIndianMobileNumber,
+} from "./file-utils";
