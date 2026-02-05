@@ -11,6 +11,7 @@ import {
   formatTimestamp,
   getFileById,
   getFileIcon,
+  getFriendlyFileLabel,
   getLoggedInUser,
   openFile,
   validateEmail,
@@ -88,9 +89,17 @@ export default function FileViewerScreen() {
       await openFile(file);
     } catch (error) {
       console.error("Failed to open file:", error);
+      const anyErr = error as any;
+      let errorMsg =
+        "Failed to open file. It may not exist or cannot be opened.";
+      if (anyErr?.code === "NOT_FOUND") {
+        errorMsg = "File not found";
+      } else if (anyErr?.code === "OPEN_ERROR") {
+        errorMsg = "Failed to open file. Try another app.";
+      }
       setToast({
         visible: true,
-        message: "Failed to open file. It may not exist or cannot be opened.",
+        message: errorMsg,
         type: "error",
       });
     } finally {
@@ -112,9 +121,16 @@ export default function FileViewerScreen() {
       router.back();
     } catch (error) {
       console.error("Failed to delete file:", error);
+      const anyErr = error as any;
+      let errorMsg = "Failed to delete file";
+      if (anyErr?.code === "NOT_FOUND") {
+        errorMsg = "File not found or already deleted";
+      } else if (anyErr?.code === "DELETE_ERROR") {
+        errorMsg = "Could not delete file. Check file system permissions.";
+      }
       setToast({
         visible: true,
-        message: "Failed to delete file",
+        message: errorMsg,
         type: "error",
       });
       setDeleting(false);
@@ -223,7 +239,9 @@ export default function FileViewerScreen() {
           <View style={styles.detailsCard}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>File Type</Text>
-              <Text style={styles.detailValue}>{file.fileType}</Text>
+              <Text style={styles.detailValue}>
+                {getFriendlyFileLabel(file.fileType, file.fileName)}
+              </Text>
             </View>
 
             <View style={styles.divider} />
@@ -326,7 +344,7 @@ export default function FileViewerScreen() {
               {senderEmail && (
                 <View style={styles.senderInfo}>
                   <Text style={styles.senderLabel}>From</Text>
-                  <Text style={styles.senderPhone}>{senderEmail}</Text>
+                  <Text style={styles.senderEmail}>{senderEmail}</Text>
                 </View>
               )}
 
@@ -561,7 +579,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  senderPhone: {
+  senderEmail: {
     fontSize: 16,
     fontWeight: "700",
     color: Colors.primary,

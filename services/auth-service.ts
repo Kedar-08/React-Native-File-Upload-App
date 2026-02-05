@@ -75,8 +75,12 @@ export async function signup(
       token,
     };
   } catch (error) {
+    // Support both Error instances and normalized error objects thrown by services
+    const anyErr = error as any;
     const errorMessage =
-      error instanceof Error ? error.message : "Signup failed";
+      (anyErr && anyErr.message) ||
+      (error instanceof Error && error.message) ||
+      "Signup failed";
     return { success: false, message: errorMessage };
   }
 }
@@ -122,8 +126,11 @@ export async function login(
       token,
     };
   } catch (error) {
+    const anyErr = error as any;
     const errorMessage =
-      error instanceof Error ? error.message : "Login failed";
+      (anyErr && anyErr.message) ||
+      (error instanceof Error && error.message) ||
+      "Login failed";
     return { success: false, message: errorMessage };
   }
 }

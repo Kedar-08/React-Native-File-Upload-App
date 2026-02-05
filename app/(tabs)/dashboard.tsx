@@ -4,7 +4,15 @@ import { getAllFiles, isLoggedIn, type FileMetadata } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function DashboardScreen() {
   const params = useLocalSearchParams();
@@ -13,11 +21,45 @@ export default function DashboardScreen() {
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [toast, setToast] = useState({
     visible: false,
     message: "",
     type: "success" as "success" | "error",
   });
+
+  const filterOptions = [
+    { key: "all", label: "All" },
+    { key: "documents", label: "Documents" },
+    { key: "images", label: "Images" },
+    { key: "videos", label: "Videos" },
+    { key: "audio", label: "Audio" },
+    { key: "others", label: "Others" },
+  ];
+
+  function getFileType(fileName: string): string {
+    const extension = fileName.split(".").pop()?.toLowerCase() || "";
+    const docs = [
+      "pdf",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+      "ppt",
+      "pptx",
+      "txt",
+      "csv",
+    ];
+    const images = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
+    const videos = ["mp4", "mkv", "avi", "mov", "webm"];
+    const audio = ["mp3", "wav", "aac", "m4a", "ogg"];
+    if (docs.includes(extension)) return "documents";
+    if (images.includes(extension)) return "images";
+    if (videos.includes(extension)) return "videos";
+    if (audio.includes(extension)) return "audio";
+    return "others";
+  }
 
   // Extract specific params to avoid dependency array issues
   const uploadDone = (params.uploadDone as string) || null;
@@ -89,12 +131,23 @@ export default function DashboardScreen() {
   async function loadFiles() {
     try {
       const allFiles = await getAllFiles();
-      setFiles(allFiles);
+      // Ensure display order is newest first (descending by timestamp)
+      const sorted = allFiles.slice().sort((a, b) => {
+        const ta = Date.parse(a.timestamp as string) || 0;
+        const tb = Date.parse(b.timestamp as string) || 0;
+        return tb - ta;
+      });
+      setFiles(sorted);
     } catch (error) {
       console.error("Failed to load files:", error);
+      const anyErr = error as any;
+      let errorMsg = "Failed to load files";
+      if (anyErr?.code === "DB_ERROR") {
+        errorMsg = "Database error. Try restarting the app.";
+      }
       setToast({
         visible: true,
-        message: "Failed to load files",
+        message: errorMsg,
         type: "error",
       });
     } finally {
@@ -108,6 +161,11 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }
 
+  const filteredFiles =
+    selectedFilter === "all"
+      ? files
+      : files.filter((file) => getFileType(file.fileName) === selectedFilter);
+
   function handleFilePress(file: FileMetadata) {
     router.push({
       pathname: "/file-viewer",
@@ -120,50 +178,103 @@ export default function DashboardScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        type={toast.type}
-        onDismiss={() => setToast({ ...toast, visible: false })}
-      />
+    <>
+      <View style={styles.container}>
+        <Toast
+          visible={toast.visible}
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast({ ...toast, visible: false })}
+        />
 
-      {/* Files List */}
-      <View style={styles.listContainer}>
-        <Text style={styles.sectionTitle}>Uploaded Files ({files.length})</Text>
-
-        {files.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons
-              name="cloud-upload-outline"
-              size={64}
-              color={Colors.iconMuted}
-            />
-            <Text style={styles.emptyText}>No files uploaded yet</Text>
-            <Text style={styles.emptySubtext}>
-              Tap the Upload tab (+) to upload your first file
+        {/* Files List */}
+        <View style={styles.listContainer}>
+          <View style={styles.header}>
+            <Text style={styles.sectionTitle}>
+              Uploaded Files ({filteredFiles.length})
             </Text>
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => setShowFilterModal(true)}
+            >
+              <Ionicons name="filter" size={20} color={Colors.primary} />
+              <Text style={styles.filterButtonText}>Filter</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <FlatList
-            data={files}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <FileItem file={item} onPress={handleFilePress} />
-            )}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={Colors.primary}
+
+          {filteredFiles.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="cloud-upload-outline"
+                size={64}
+                color={Colors.iconMuted}
               />
-            }
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+              <Text style={styles.emptyText}>No files uploaded yet</Text>
+              <Text style={styles.emptySubtext}>
+                Tap the Upload tab (+) to upload your first file
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredFiles}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <FileItem file={item} onPress={handleFilePress} />
+              )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={Colors.primary}
+                />
+              }
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
       </View>
-    </View>
+
+      <Modal
+        visible={showFilterModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFilterModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Filter by Type</Text>
+            {filterOptions.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.filterOption,
+                  selectedFilter === option.key && styles.selectedFilterOption,
+                ]}
+                onPress={() => {
+                  setSelectedFilter(option.key);
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    selectedFilter === option.key &&
+                      styles.selectedFilterOptionText,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -175,15 +286,33 @@ const styles = StyleSheet.create({
   listContainer: {
     flex: 1,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: Colors.textSecondary,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: Colors.backgroundCard,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: Colors.primary,
+    marginLeft: 4,
   },
   listContent: {
     paddingBottom: 24,
@@ -205,5 +334,44 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 8,
     textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: 12,
+    padding: 20,
+    width: "80%",
+    maxWidth: 300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  filterOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginVertical: 2,
+  },
+  selectedFilterOption: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  filterOptionText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  selectedFilterOptionText: {
+    color: Colors.primaryDark,
+    fontWeight: "700",
   },
 });

@@ -1,5 +1,10 @@
 import { Colors } from "@/constants/theme";
-import { formatTimestamp, getFileIcon, type FileMetadata } from "@/services";
+import {
+  formatTimestamp,
+  getFileIcon,
+  getFriendlyFileLabel,
+  type FileMetadata,
+} from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -10,13 +15,9 @@ interface FileItemProps {
 }
 
 export function FileItem({ file, onPress }: FileItemProps) {
-  const getFileTypeLabel = (fileType: string): string => {
-    const parts = fileType.split("/");
-    if (parts.length > 1) {
-      return parts[1].toUpperCase();
-    }
-    return fileType.toUpperCase();
-  };
+  // Use shared friendly label helper
+  const getFileTypeLabel = (fileType: string, fileName?: string): string =>
+    getFriendlyFileLabel(fileType, fileName);
 
   return (
     <TouchableOpacity
@@ -35,7 +36,9 @@ export function FileItem({ file, onPress }: FileItemProps) {
         <Text style={styles.fileName} numberOfLines={1}>
           {file.fileName}
         </Text>
-        <Text style={styles.fileType}>{getFileTypeLabel(file.fileType)}</Text>
+        <Text style={styles.fileType}>
+          {getFileTypeLabel(file.fileType, file.fileName)}
+        </Text>
         <Text style={styles.metadata}>Uploaded by {file.uploadedByEmail}</Text>
         <Text style={styles.timestamp}>{formatTimestamp(file.timestamp)}</Text>
       </View>

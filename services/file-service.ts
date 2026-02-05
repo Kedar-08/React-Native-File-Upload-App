@@ -16,13 +16,22 @@ export interface FileMetadata {
 
 // Pick one or more files using document picker
 export async function pickFile(): Promise<DocumentPicker.DocumentPickerResult> {
-  const result = await DocumentPicker.getDocumentAsync({
-    type: "*/*", // Allow all file types
-    copyToCacheDirectory: true,
-    multiple: true, // Enable multiple file selection
-  });
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*", // Allow all file types
+      copyToCacheDirectory: true,
+      multiple: true, // Enable multiple file selection
+    });
 
-  return result;
+    return result;
+  } catch (err) {
+    // Normalize error object for callers
+    throw {
+      message: "Failed to open document picker",
+      code: "PICKER_ERROR",
+      original: err,
+    };
+  }
 }
 
 // Save multiple files to local storage and database
@@ -44,7 +53,12 @@ export async function saveMultipleFiles(
     uploadsDir.create();
   }
 
-  const db = await getDatabase();
+  let db;
+  try {
+    db = await getDatabase();
+  } catch (err) {
+    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
+  }
 
   // Process each file
   for (const asset of pickerResult.assets) {
@@ -118,24 +132,35 @@ export async function saveFile(
   const fileType = mimeType || getFileTypeFromName(name);
 
   // Save metadata to database
-  const db = await getDatabase();
-  const result = await db.runAsync(
-    `INSERT INTO files (fileName, fileType, uploadedByEmail, uploadedByUserId, localFilePath)
-     VALUES (?, ?, ?, ?, ?)`,
-    [name, fileType, userEmail, userId, localFilePath],
-  );
-
-  // Get the saved file metadata
-  const savedFile = await db.getFirstAsync<FileMetadata>(
-    "SELECT * FROM files WHERE id = ?",
-    [result.lastInsertRowId],
-  );
-
-  if (!savedFile) {
-    throw new Error("Failed to save file metadata");
+  let db;
+  try {
+    db = await getDatabase();
+  } catch (err) {
+    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
   }
 
-  return savedFile;
+  try {
+    const result = await db.runAsync(
+      `INSERT INTO files (fileName, fileType, uploadedByEmail, uploadedByUserId, localFilePath)
+       VALUES (?, ?, ?, ?, ?)`,
+      [name, fileType, userEmail, userId, localFilePath],
+    );
+
+    // Get the saved file metadata
+    const savedFile = await db.getFirstAsync<FileMetadata>(
+      "SELECT * FROM files WHERE id = ?",
+      [result.lastInsertRowId],
+    );
+
+    if (!savedFile) {
+      throw { message: "Failed to save file metadata", code: "SAVE_FAILED" };
+    }
+
+    return savedFile;
+  } catch (err) {
+    // Normalize database/file system errors
+    throw { message: "Failed to save file", code: "SAVE_ERROR", original: err };
+  }
 }
 
 // Get all uploaded files
@@ -144,6 +169,7 @@ export async function getAllFiles(): Promise<FileMetadata[]> {
 
   const files = await db.getAllAsync<FileMetadata>(
     "SELECT * FROM files ORDER BY timestamp DESC",
+    [],
   );
 
   return files;
@@ -192,41 +218,58 @@ export async function getFileByName(
 // Open a file with the default app (Android only)
 export async function openFile(file: FileMetadata): Promise<void> {
   // Check if file exists
-  const fileRef = new File(file.localFilePath);
+  try {
+    const fileRef = new File(file.localFilePath);
 
-  if (!fileRef.exists) {
-    throw new Error("File not found");
+    if (!fileRef.exists) {
+      throw { message: "File not found", code: "NOT_FOUND" };
+    }
+
+    // Convert file:// URI to content:// URI (required for Android 7+)
+    const contentUri = await getContentUriAsync(file.localFilePath);
+
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: contentUri,
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      type: file.fileType,
+    });
+  } catch (err) {
+    throw { message: "Failed to open file", code: "OPEN_ERROR", original: err };
   }
-
-  // Convert file:// URI to content:// URI (required for Android 7+)
-  const contentUri = await getContentUriAsync(file.localFilePath);
-
-  await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-    data: contentUri,
-    flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-    type: file.fileType,
-  });
 }
 
 // Delete a file
 export async function deleteFile(fileId: number): Promise<void> {
-  const db = await getDatabase();
-
-  // Get file info first
-  const file = await getFileById(fileId);
-
-  if (!file) {
-    throw new Error("File not found");
+  let db;
+  try {
+    db = await getDatabase();
+  } catch (err) {
+    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
   }
 
-  // Delete from file system
-  const fileRef = new File(file.localFilePath);
-  if (fileRef.exists) {
-    fileRef.delete();
-  }
+  try {
+    // Get file info first
+    const file = await getFileById(fileId);
 
-  // Delete from database
-  await db.runAsync("DELETE FROM files WHERE id = ?", [fileId]);
+    if (!file) {
+      throw { message: "File not found", code: "NOT_FOUND" };
+    }
+
+    // Delete from file system
+    const fileRef = new File(file.localFilePath);
+    if (fileRef.exists) {
+      fileRef.delete();
+    }
+
+    // Delete from database
+    await db.runAsync("DELETE FROM files WHERE id = ?", [fileId]);
+  } catch (err) {
+    throw {
+      message: "Failed to delete file",
+      code: "DELETE_ERROR",
+      original: err,
+    };
+  }
 }
 
 // Helper function to determine file type from name

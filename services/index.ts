@@ -26,8 +26,4 @@ export {
   saveMultipleFiles,
   type FileMetadata,
 } from "./file-service";
-export {
-  getFileIcon,
-  validateEmail,
-  validateIndianMobileNumber,
-} from "./file-utils";
+export { getFileIcon, getFriendlyFileLabel, validateEmail } from "./file-utils";

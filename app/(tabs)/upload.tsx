@@ -1,13 +1,7 @@
-import { Text, View } from "react-native";
-
-// This screen is not meant to be rendered - the Upload tab button
-// in the tabs navigation handles file picking via listener.
-// This file exists only to satisfy the route structure.
-
+// This route exists only to satisfy the Expo Router structure.
+// The Upload tab's `tabPress` listener in the tabs layout intercepts
+// the press and performs the file-picking flow, so this screen
+// should never render UI. Returning null prevents any accidental UI.
 export default function UploadScreen() {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text>Upload</Text>
-    </View>
-  );
+  return null;
 }

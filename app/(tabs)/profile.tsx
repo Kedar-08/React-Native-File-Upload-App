@@ -39,9 +39,14 @@ export default function ProfileScreen() {
       setUser(userData as User);
     } catch (error) {
       console.error("Failed to load user data:", error);
+      const anyErr = error as any;
+      let errorMsg = "Failed to load profile";
+      if (anyErr?.code === "AUTH_ERROR" || !anyErr?.code) {
+        errorMsg = "Session expired. Please login again.";
+      }
       setToast({
         visible: true,
-        message: "Failed to load profile",
+        message: errorMsg,
         type: "error",
       });
     } finally {

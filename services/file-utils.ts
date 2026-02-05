@@ -34,34 +34,6 @@ export function getFileIcon(
 }
 
 /**
- * Validate Indian mobile number.
- * Must be exactly 10 digits and start with 6, 7, 8, or 9.
- */
-export function validateIndianMobileNumber(number: string): {
-  valid: boolean;
-  error: string;
-} {
-  const cleaned = number.replace(/\D/g, "");
-
-  if (cleaned.length !== 10) {
-    return {
-      valid: false,
-      error: "Mobile number must be exactly 10 digits",
-    };
-  }
-
-  const firstDigit = parseInt(cleaned[0]);
-  if (![6, 7, 8, 9].includes(firstDigit)) {
-    return {
-      valid: false,
-      error: "Indian mobile numbers must start with 6, 7, 8, or 9",
-    };
-  }
-
-  return { valid: true, error: "" };
-}
-
-/**
  * Validate email address format.
  */
 export function validateEmail(email: string): {
@@ -86,4 +58,46 @@ export function validateEmail(email: string): {
   }
 
   return { valid: true, error: "" };
+}
+
+/**
+ * Map MIME type or file name to a friendly label for display.
+ */
+export function getFriendlyFileLabel(
+  fileType: string,
+  fileName?: string,
+): string {
+  const type = (fileType || "").toLowerCase();
+
+  const mimeMap: Record<string, string> = {
+    "text/plain": "TXT",
+    "application/pdf": "PDF",
+    "application/msword": "Word",
+    "application/vnd.ms-excel": "Excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      "Excel",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      "Word",
+  };
+
+  if (type.startsWith("image/")) return "Image";
+  if (type.startsWith("video/")) return "Video";
+  if (type.startsWith("audio/")) return "Audio";
+
+  if (mimeMap[type]) return mimeMap[type];
+
+  // If type looks like 'application/xxx' but not matched above, try to derive
+  if (type.includes("/")) {
+    const parts = type.split("/");
+    const candidate = parts[1] || parts[0];
+    return candidate.toUpperCase();
+  }
+
+  // Fallback: try to derive from extension in fileName
+  if (fileName) {
+    const ext = fileName.split(".").pop()?.toUpperCase();
+    if (ext) return ext;
+  }
+
+  return "File";
 }
