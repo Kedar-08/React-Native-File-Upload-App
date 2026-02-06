@@ -1,9 +1,18 @@
+/**
+ * Tabs Layout - Main app navigation with Inbox tab.
+ */
+
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { getFileByName, getLoggedInUser, saveMultipleFiles } from "@/services";
+import {
+  checkDuplicateFile,
+  getLoggedInUser,
+  getUnreadShareCount,
+  uploadMultipleFiles,
+} from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -20,17 +29,31 @@ export default function TabsLayout() {
   >([]);
   const [currentAssetIndex, setCurrentAssetIndex] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Load unread count when tabs come into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadUnreadCount();
+    }, [])
+  );
+
+  async function loadUnreadCount() {
+    try {
+      const count = await getUnreadShareCount();
+      setUnreadCount(count);
+    } catch (error) {
+      console.error("Failed to load unread count:", error);
+    }
+  }
 
   // Check each asset for duplicates and collect approved ones
   const processDuplicateCheck = useCallback(
     async (
       assets: DocumentPicker.DocumentPickerAsset[],
-      userIdParam: number,
-      userEmailParam: string,
+      userIdParam: number
     ) => {
       setUserId(userIdParam);
-      setUserEmail(userEmailParam);
       setPendingAssets(assets);
       setApprovedAssets([]);
       setCurrentAssetIndex(0);
@@ -38,7 +61,7 @@ export default function TabsLayout() {
       // Check first file
       if (assets.length > 0) {
         const firstAsset = assets[0];
-        const existing = await getFileByName(firstAsset.name);
+        const existing = await checkDuplicateFile(firstAsset.name, userIdParam);
         if (existing) {
           setDuplicateFile(firstAsset.name);
           setShowDuplicateModal(true);
@@ -48,7 +71,7 @@ export default function TabsLayout() {
         }
       }
     },
-    [],
+    []
   );
 
   const handleUploadAgain = useCallback(async () => {
@@ -61,7 +84,7 @@ export default function TabsLayout() {
     // Check next file
     if (nextIndex < pendingAssets.length) {
       const nextAsset = pendingAssets[nextIndex];
-      const existing = await getFileByName(nextAsset.name);
+      const existing = await checkDuplicateFile(nextAsset.name, userId!);
       setCurrentAssetIndex(nextIndex);
 
       if (existing) {
@@ -73,12 +96,12 @@ export default function TabsLayout() {
         handleUploadAgain();
       }
     } else {
-      // All files processed, now save the approved ones
-      if (newApproved.length > 0 && userId && userEmail) {
-        await performUpload(newApproved, userId, userEmail);
+      // All files processed, now upload the approved ones
+      if (newApproved.length > 0 && userId) {
+        await performUpload(newApproved, userId);
       }
     }
-  }, [currentAssetIndex, pendingAssets, approvedAssets, userId, userEmail]);
+  }, [currentAssetIndex, pendingAssets, approvedAssets, userId]);
 
   const handleSkip = useCallback(async () => {
     setShowDuplicateModal(false);
@@ -88,7 +111,7 @@ export default function TabsLayout() {
     // Check next file
     if (nextIndex < pendingAssets.length) {
       const nextAsset = pendingAssets[nextIndex];
-      const existing = await getFileByName(nextAsset.name);
+      const existing = await checkDuplicateFile(nextAsset.name, userId!);
       setCurrentAssetIndex(nextIndex);
 
       if (existing) {
@@ -99,37 +122,32 @@ export default function TabsLayout() {
         handleSkip();
       }
     } else {
-      // All files processed, now save the approved ones
-      if (approvedAssets.length > 0 && userId && userEmail) {
-        await performUpload(approvedAssets, userId, userEmail);
+      // All files processed, now upload the approved ones
+      if (approvedAssets.length > 0 && userId) {
+        await performUpload(approvedAssets, userId);
       }
     }
-  }, [currentAssetIndex, pendingAssets, approvedAssets, userId, userEmail]);
+  }, [currentAssetIndex, pendingAssets, approvedAssets, userId]);
 
   const performUpload = useCallback(
-    async (
-      assets: DocumentPicker.DocumentPickerAsset[],
-      userIdParam: number,
-      userEmailParam: string,
-    ) => {
+    async (assets: DocumentPicker.DocumentPickerAsset[], userIdParam: number) => {
       try {
-        // Create a fake result object for saveMultipleFiles
+        // Create a fake result object for uploadMultipleFiles
         const fakeResult = {
           assets,
           canceled: false,
         };
 
-        const { saved, failed } = await saveMultipleFiles(
+        const { saved, failed } = await uploadMultipleFiles(
           fakeResult as any,
-          userIdParam,
-          userEmailParam,
+          userIdParam
         );
 
         console.log(
-          "Save result - Saved:",
+          "Upload result - Saved:",
           saved.length,
           "Failed:",
-          failed.length,
+          failed.length
         );
 
         // Navigate to dashboard and pass result params
@@ -145,7 +163,7 @@ export default function TabsLayout() {
         console.error("Error uploading files:", error);
       }
     },
-    [router],
+    [router]
   );
 
   const handleUploadPress = useCallback(async () => {
@@ -179,10 +197,10 @@ export default function TabsLayout() {
       // Ensure user.id is a number
       const userIdNum =
         typeof user.id === "string" ? parseInt(user.id, 10) : user.id;
-      console.log("Checking duplicates for user:", userIdNum, user.email);
+      console.log("Checking duplicates for user:", userIdNum);
 
       // Start duplicate check process
-      await processDuplicateCheck(result.assets, userIdNum, user.email);
+      await processDuplicateCheck(result.assets, userIdNum);
     } catch (error) {
       console.error("Error uploading files:", error);
     }
@@ -261,6 +279,27 @@ export default function TabsLayout() {
           }}
         />
 
+        {/* Inbox Tab - Files shared with me */}
+        <Tabs.Screen
+          name="inbox"
+          options={{
+            title: "Inbox",
+            tabBarLabel: "Inbox",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="mail" size={size} color={color} />
+            ),
+            headerTitle: "Inbox",
+            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+            tabBarBadgeStyle: {
+              backgroundColor: Colors.error,
+              fontSize: 10,
+              minWidth: 18,
+              height: 18,
+              borderRadius: 9,
+            },
+          }}
+        />
+
         {/* Profile Tab */}
         <Tabs.Screen
           name="profile"
@@ -294,7 +333,7 @@ export default function TabsLayout() {
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={handleSkip}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>Skip</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.uploadButton]}

@@ -1,339 +1,319 @@
-import { getDatabase } from "@/storage";
-import * as DocumentPicker from "expo-document-picker";
-import { Directory, File, Paths } from "expo-file-system";
-import { getContentUriAsync } from "expo-file-system/legacy";
-import * as IntentLauncher from "expo-intent-launcher";
+/**
+ * File service for backend-driven file operations.
+ * Handles file upload, listing, and management via backend APIs.
+ */
 
+import * as DocumentPicker from "expo-document-picker";
+import {
+  cacheDirectory,
+  downloadAsync,
+  getContentUriAsync,
+} from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
+import { adaptFileArray, adaptFileResponse } from "./adapters/file-adapter";
+import apiClient from "./api-client";
+import { normalizeError } from "./normalize-error";
+
+/**
+ * File metadata.
+ * NOTE: ID fields (id, uploadedByUserId) are INTERNAL ONLY.
+ * UI displays uploadedByUsername/uploadedByEmail instead of numeric IDs.
+ */
 export interface FileMetadata {
-  id: number;
+  id: number; // @internal
   fileName: string;
   fileType: string;
-  uploadedByEmail: string;
-  uploadedByUserId: number;
+  fileSize: number;
+  uploadedByUserId: number; // @internal - use uploadedByUsername for display
+  uploadedByUsername?: string;
+  uploadedByEmail?: string;
   timestamp: string;
-  localFilePath: string;
+  downloadUrl?: string;
 }
 
-// Pick one or more files using document picker
+export interface UploadResult {
+  success: boolean;
+  file?: FileMetadata;
+  error?: string;
+}
+
+export interface MultiUploadResult {
+  saved: FileMetadata[];
+  failed: { name: string; error: string }[];
+}
+
+/**
+ * Pick one or more files using document picker.
+ */
 export async function pickFile(): Promise<DocumentPicker.DocumentPickerResult> {
   try {
     const result = await DocumentPicker.getDocumentAsync({
-      type: "*/*", // Allow all file types
+      type: "*/*",
       copyToCacheDirectory: true,
-      multiple: true, // Enable multiple file selection
+      multiple: true,
     });
-
     return result;
   } catch (err) {
-    // Normalize error object for callers
-    throw {
+    throw normalizeError({
       message: "Failed to open document picker",
       code: "PICKER_ERROR",
       original: err,
+    });
+  }
+}
+
+/**
+ * Upload a single file to the backend.
+ */
+export async function uploadFile(
+  asset: DocumentPicker.DocumentPickerAsset,
+  userId: number,
+): Promise<UploadResult> {
+  try {
+    const formData = new FormData();
+
+    // Create file object for upload
+    const fileToUpload = {
+      uri: asset.uri,
+      type: asset.mimeType || "application/octet-stream",
+      name: asset.name,
+    } as any;
+
+    formData.append("file", fileToUpload);
+    formData.append("userId", userId.toString());
+
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.post<FileMetadata>(
+      "/files/upload",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 60000, // Extended timeout for file uploads
+      },
+    );
+
+    return {
+      success: true,
+      file: response.data,
+    };
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    console.error("File upload failed:", ne);
+    return {
+      success: false,
+      error: ne.message || "Upload failed",
     };
   }
 }
 
-// Save multiple files to local storage and database
-export async function saveMultipleFiles(
+/**
+ * Upload multiple files to the backend.
+ */
+export async function uploadMultipleFiles(
   pickerResult: DocumentPicker.DocumentPickerResult,
   userId: number,
-  userEmail: string,
-): Promise<{ saved: FileMetadata[]; failed: string[] }> {
-  if (!pickerResult.assets) {
+): Promise<MultiUploadResult> {
+  if (!pickerResult.assets || pickerResult.assets.length === 0) {
     return { saved: [], failed: [] };
   }
 
   const saved: FileMetadata[] = [];
-  const failed: string[] = [];
+  const failed: { name: string; error: string }[] = [];
 
-  // Create app's document directory if it doesn't exist
-  const uploadsDir = new Directory(Paths.document, "uploads");
-  if (!uploadsDir.exists) {
-    uploadsDir.create();
-  }
-
-  let db;
-  try {
-    db = await getDatabase();
-  } catch (err) {
-    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
-  }
-
-  // Process each file
+  // Upload files sequentially to avoid overwhelming the server
   for (const asset of pickerResult.assets) {
-    try {
-      const { uri, name, mimeType } = asset;
-
-      // Generate unique filename
-      const timestamp = Date.now();
-      const uniqueFileName = `${timestamp}_${name}`;
-      const destinationFile = new File(uploadsDir, uniqueFileName);
-      const localFilePath = destinationFile.uri;
-
-      // Copy file to app's document directory
-      const sourceFile = new File(uri);
-      sourceFile.copy(destinationFile);
-
-      // Determine file type
-      const fileType = mimeType || getFileTypeFromName(name);
-
-      // Save metadata to database
-      const result = await db.runAsync(
-        `INSERT INTO files (fileName, fileType, uploadedByEmail, uploadedByUserId, localFilePath)
-         VALUES (?, ?, ?, ?, ?)`,
-        [name, fileType, userEmail, userId, localFilePath],
-      );
-
-      // Get the saved file metadata
-      const savedFile = await db.getFirstAsync<FileMetadata>(
-        "SELECT * FROM files WHERE id = ?",
-        [result.lastInsertRowId],
-      );
-
-      if (savedFile) {
-        saved.push(savedFile);
-      } else {
-        failed.push(name);
-      }
-    } catch (error) {
-      const fileName = asset.name || "unknown";
-      console.error(`Failed to save file ${fileName}:`, error);
-      failed.push(fileName);
+    const result = await uploadFile(asset, userId);
+    if (result.success && result.file) {
+      saved.push(result.file);
+    } else {
+      failed.push({
+        name: asset.name,
+        error: result.error || "Unknown error",
+      });
     }
   }
 
   return { saved, failed };
 }
-export async function saveFile(
-  pickerResult: DocumentPicker.DocumentPickerSuccessResult,
-  userId: number,
-  userEmail: string,
-): Promise<FileMetadata> {
-  const { uri, name, mimeType } = pickerResult.assets[0];
 
-  // Create app's document directory if it doesn't exist
-  const uploadsDir = new Directory(Paths.document, "uploads");
-  if (!uploadsDir.exists) {
-    uploadsDir.create();
-  }
-
-  // Generate unique filename
-  const timestamp = Date.now();
-  const uniqueFileName = `${timestamp}_${name}`;
-  const destinationFile = new File(uploadsDir, uniqueFileName);
-  const localFilePath = destinationFile.uri;
-
-  // Copy file to app's document directory
-  const sourceFile = new File(uri);
-  sourceFile.copy(destinationFile);
-
-  // Determine file type
-  const fileType = mimeType || getFileTypeFromName(name);
-
-  // Save metadata to database
-  let db;
+/**
+ * Get all files uploaded by the current user.
+ */
+export async function getMyFiles(): Promise<FileMetadata[]> {
   try {
-    db = await getDatabase();
-  } catch (err) {
-    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
-  }
-
-  try {
-    const result = await db.runAsync(
-      `INSERT INTO files (fileName, fileType, uploadedByEmail, uploadedByUserId, localFilePath)
-       VALUES (?, ?, ?, ?, ?)`,
-      [name, fileType, userEmail, userId, localFilePath],
-    );
-
-    // Get the saved file metadata
-    const savedFile = await db.getFirstAsync<FileMetadata>(
-      "SELECT * FROM files WHERE id = ?",
-      [result.lastInsertRowId],
-    );
-
-    if (!savedFile) {
-      throw { message: "Failed to save file metadata", code: "SAVE_FAILED" };
-    }
-
-    return savedFile;
-  } catch (err) {
-    // Normalize database/file system errors
-    throw { message: "Failed to save file", code: "SAVE_ERROR", original: err };
-  }
-}
-
-// Get all uploaded files
-export async function getAllFiles(): Promise<FileMetadata[]> {
-  const db = await getDatabase();
-
-  const files = await db.getAllAsync<FileMetadata>(
-    "SELECT * FROM files ORDER BY timestamp DESC",
-    [],
-  );
-
-  return files;
-}
-
-// Get files uploaded by a specific user
-export async function getFilesByUser(userId: number): Promise<FileMetadata[]> {
-  const db = await getDatabase();
-
-  const files = await db.getAllAsync<FileMetadata>(
-    "SELECT * FROM files WHERE uploadedByUserId = ? ORDER BY timestamp DESC",
-    [userId],
-  );
-
-  return files;
-}
-
-// Get a single file by id
-export async function getFileById(
-  fileId: number,
-): Promise<FileMetadata | null> {
-  const db = await getDatabase();
-
-  const file = await db.getFirstAsync<FileMetadata>(
-    "SELECT * FROM files WHERE id = ?",
-    [fileId],
-  );
-
-  return file || null;
-}
-
-// Check if a file with the same name already exists
-export async function getFileByName(
-  fileName: string,
-): Promise<FileMetadata | null> {
-  const db = await getDatabase();
-
-  const file = await db.getFirstAsync<FileMetadata>(
-    "SELECT * FROM files WHERE fileName = ?",
-    [fileName],
-  );
-
-  return file || null;
-}
-
-// Open a file with the default app (Android only)
-export async function openFile(file: FileMetadata): Promise<void> {
-  // Check if file exists
-  try {
-    const fileRef = new File(file.localFilePath);
-
-    if (!fileRef.exists) {
-      throw { message: "File not found", code: "NOT_FOUND" };
-    }
-
-    // Convert file:// URI to content:// URI (required for Android 7+)
-    const contentUri = await getContentUriAsync(file.localFilePath);
-
-    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-      data: contentUri,
-      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-      type: file.fileType,
-    });
-  } catch (err) {
-    throw { message: "Failed to open file", code: "OPEN_ERROR", original: err };
-  }
-}
-
-// Delete a file
-export async function deleteFile(fileId: number): Promise<void> {
-  let db;
-  try {
-    db = await getDatabase();
-  } catch (err) {
-    throw { message: "Database unavailable", code: "DB_ERROR", original: err };
-  }
-
-  try {
-    // Get file info first
-    const file = await getFileById(fileId);
-
-    if (!file) {
-      throw { message: "File not found", code: "NOT_FOUND" };
-    }
-
-    // Delete from file system
-    const fileRef = new File(file.localFilePath);
-    if (fileRef.exists) {
-      fileRef.delete();
-    }
-
-    // Delete from database
-    await db.runAsync("DELETE FROM files WHERE id = ?", [fileId]);
-  } catch (err) {
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.get("/files/my-files");
+    // Use adapter to map backend file responses
+    return adaptFileArray(response.data);
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    console.error("Failed to fetch files:", ne);
     throw {
-      message: "Failed to delete file",
-      code: "DELETE_ERROR",
-      original: err,
+      message: ne.message || "Failed to load files",
+      code: ne.code || "FETCH_ERROR",
+      original: ne.original ?? ne,
     };
   }
 }
 
-// Helper function to determine file type from name
-function getFileTypeFromName(fileName: string): string {
-  const extension = fileName.split(".").pop()?.toLowerCase() || "";
-
-  const mimeTypes: Record<string, string> = {
-    // Documents
-    pdf: "application/pdf",
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ppt: "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    txt: "text/plain",
-    // Images
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    svg: "image/svg+xml",
-    // Audio
-    mp3: "audio/mpeg",
-    wav: "audio/wav",
-    // Video
-    mp4: "video/mp4",
-    mov: "video/quicktime",
-    avi: "video/x-msvideo",
-    // Archives
-    zip: "application/zip",
-    rar: "application/x-rar-compressed",
-    "7z": "application/x-7z-compressed",
-    // Code
-    json: "application/json",
-    xml: "application/xml",
-    html: "text/html",
-    css: "text/css",
-    js: "application/javascript",
-  };
-
-  return mimeTypes[extension] || "application/octet-stream";
+/**
+ * Get a specific file by ID.
+ */
+export async function getFileById(
+  fileId: number,
+): Promise<FileMetadata | null> {
+  try {
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.get(`/files/${fileId}`);
+    // Use adapter to map backend response
+    return adaptFileResponse(response.data);
+  } catch (error: any) {
+    if (error.status === 404) {
+      return null;
+    }
+    const ne = normalizeError(error);
+    console.error("Failed to fetch file:", ne);
+    throw {
+      message: ne.message || "Failed to load file",
+      code: ne.code || "FETCH_ERROR",
+      original: ne.original ?? ne,
+    };
+  }
 }
 
-// Format file size for display
+/**
+ * Check if a file with the same name exists for the user.
+ */
+export async function checkDuplicateFile(
+  fileName: string,
+  userId: number,
+): Promise<FileMetadata | null> {
+  try {
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.get<FileMetadata | null>(
+      "/files/check-duplicate",
+      {
+        params: { fileName, userId },
+      },
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error.status === 404) {
+      return null;
+    }
+    const ne = normalizeError(error);
+    console.error("Failed to check duplicate:", ne);
+    return null; // Assume no duplicate on error
+  }
+}
+
+/**
+ * Delete a file.
+ */
+export async function deleteFile(fileId: number): Promise<void> {
+  try {
+    // TODO: Replace with actual endpoint when backend is ready
+    await apiClient.delete(`/files/${fileId}`);
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    console.error("Failed to delete file:", ne);
+    throw {
+      message: ne.message || "Failed to delete file",
+      code: ne.code || "DELETE_ERROR",
+      original: ne.original ?? ne,
+    };
+  }
+}
+
+/**
+ * Download a file from backend and open it.
+ */
+export async function downloadAndOpenFile(file: FileMetadata): Promise<void> {
+  try {
+    if (!file.downloadUrl) {
+      // Construct download URL from file ID
+      const downloadUrl = `${apiClient.defaults.baseURL}/files/${file.id}/download`;
+
+      // Download file to cache directory
+      const localUri = `${cacheDirectory}${file.fileName}`;
+
+      const downloadResult = await downloadAsync(downloadUrl, localUri, {
+        headers: {
+          Authorization: apiClient.defaults.headers.common[
+            "Authorization"
+          ] as string,
+        },
+      });
+
+      if (downloadResult.status !== 200) {
+        throw new Error("Download failed");
+      }
+
+      // Open the downloaded file
+      await openLocalFile(localUri, file.fileType);
+    }
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    console.error("Failed to download and open file:", ne);
+    throw {
+      message: ne.message || "Failed to open file",
+      code: ne.code || "OPEN_ERROR",
+      original: ne.original ?? ne,
+    };
+  }
+}
+
+/**
+ * Open a local file with the default app (Android).
+ */
+async function openLocalFile(
+  localUri: string,
+  mimeType: string,
+): Promise<void> {
+  try {
+    // Convert file:// URI to content:// URI (required for Android 7+)
+    const contentUri = await getContentUriAsync(localUri);
+
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: contentUri,
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      type: mimeType,
+    });
+  } catch (err) {
+    throw normalizeError({
+      message: "Failed to open file",
+      code: "OPEN_ERROR",
+      original: err,
+    });
+  }
+}
+
+/**
+ * Format file size to human-readable string.
+ */
 export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 Bytes";
-
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-// Format timestamp for display
+/**
+ * Format timestamp to human-readable string.
+ */
 export function formatTimestamp(timestamp: string): string {
   const date = new Date(timestamp);
-  return date.toLocaleDateString("en-US", {
+  if (isNaN(date.getTime())) return "";
+  // Show a full, localized date and time so users see the exact timestamp
+  return date.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
   });
 }

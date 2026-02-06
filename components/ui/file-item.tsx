@@ -39,7 +39,9 @@ export function FileItem({ file, onPress }: FileItemProps) {
         <Text style={styles.fileType}>
           {getFileTypeLabel(file.fileType, file.fileName)}
         </Text>
-        <Text style={styles.metadata}>Uploaded by {file.uploadedByEmail}</Text>
+        <Text style={styles.metadata}>
+          Uploaded by {file.uploadedByUsername || file.uploadedByEmail || "You"}
+        </Text>
         <Text style={styles.timestamp}>{formatTimestamp(file.timestamp)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={Colors.iconMuted} />

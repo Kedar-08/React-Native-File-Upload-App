@@ -1,31 +1,39 @@
+/**
+ * File Viewer Screen - View file details, share with users, open/delete.
+ */
+
 import {
   Button,
   ConfirmationModal,
-  InputField,
   LoadingSpinner,
   Toast,
 } from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import {
   deleteFile,
+  downloadAndOpenFile,
+  formatFileSize,
   formatTimestamp,
   getFileById,
   getFileIcon,
   getFriendlyFileLabel,
   getLoggedInUser,
-  openFile,
-  validateEmail,
+  searchUsers,
+  shareFile,
   type FileMetadata,
+  type User,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -36,11 +44,16 @@ export default function FileViewerScreen() {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [showSendModal, setShowSendModal] = useState(false);
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [sending, setSending] = useState(false);
-  const [emailError, setEmailError] = useState("");
-  const [senderEmail, setSenderEmail] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+  // Share modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [sharing, setSharing] = useState(false);
+
   const [toast, setToast] = useState({
     visible: false,
     message: "",
@@ -50,13 +63,13 @@ export default function FileViewerScreen() {
 
   useEffect(() => {
     loadFile();
-    loadSenderEmail();
+    loadCurrentUser();
   }, [fileId]);
 
-  async function loadSenderEmail() {
+  async function loadCurrentUser() {
     const user = await getLoggedInUser();
-    if (user?.email) {
-      setSenderEmail(user.email);
+    if (user?.id) {
+      setCurrentUserId(user.id);
     }
   }
 
@@ -86,20 +99,12 @@ export default function FileViewerScreen() {
 
     setOpening(true);
     try {
-      await openFile(file);
-    } catch (error) {
+      await downloadAndOpenFile(file);
+    } catch (error: any) {
       console.error("Failed to open file:", error);
-      const anyErr = error as any;
-      let errorMsg =
-        "Failed to open file. It may not exist or cannot be opened.";
-      if (anyErr?.code === "NOT_FOUND") {
-        errorMsg = "File not found";
-      } else if (anyErr?.code === "OPEN_ERROR") {
-        errorMsg = "Failed to open file. Try another app.";
-      }
       setToast({
         visible: true,
-        message: errorMsg,
+        message: error.message || "Failed to open file",
         type: "error",
       });
     } finally {
@@ -119,75 +124,97 @@ export default function FileViewerScreen() {
     try {
       await deleteFile(file.id);
       router.back();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete file:", error);
-      const anyErr = error as any;
-      let errorMsg = "Failed to delete file";
-      if (anyErr?.code === "NOT_FOUND") {
-        errorMsg = "File not found or already deleted";
-      } else if (anyErr?.code === "DELETE_ERROR") {
-        errorMsg = "Could not delete file. Check file system permissions.";
-      }
       setToast({
         visible: true,
-        message: errorMsg,
+        message: error.message || "Failed to delete file",
         type: "error",
       });
       setDeleting(false);
     }
   }
 
-  function handleSendPress() {
-    setShowSendModal(true);
-    setRecipientEmail("");
-    setEmailError("");
+  function handleSharePress() {
+    setShowShareModal(true);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedUser(null);
   }
 
-  async function handleSendFile() {
-    const validation = validateEmail(recipientEmail);
-    if (!validation.valid) {
-      setEmailError(validation.error);
+  async function handleSearch(query: string) {
+    setSearchQuery(query);
+    setSelectedUser(null);
+
+    if (query.trim().length < 2) {
+      setSearchResults([]);
       return;
     }
 
-    setSending(true);
+    setSearching(true);
     try {
-      // Simulate sending with a delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const result = await searchUsers(query);
+      // Safely get users array and filter out current user
+      const users = (result && (result.users ?? (result as any).users)) || [];
+      const filtered = (users || []).filter((u) => u.id !== currentUserId);
+      setSearchResults(filtered);
+    } catch (error) {
+      console.error("Search failed:", error);
+    } finally {
+      setSearching(false);
+    }
+  }
 
-      // Show success message
-      setToast({
-        visible: true,
-        message: `File sent successfully to ${recipientEmail}`,
-        type: "success",
+  function handleSelectUser(user: User) {
+    setSelectedUser(user);
+    setSearchQuery(user.username);
+    setSearchResults([]);
+  }
+
+  async function handleShareFile() {
+    if (!file || !selectedUser || !currentUserId) return;
+
+    setSharing(true);
+    try {
+      const result = await shareFile({
+        fileId: file.id,
+        fromUserId: currentUserId,
+        toUserId: selectedUser.id,
       });
 
-      // Close modal and reset
-      setShowSendModal(false);
-      setRecipientEmail("");
-      setEmailError("");
-    } catch (error) {
-      console.error("Failed to send file:", error);
+      if (result.success) {
+        setToast({
+          visible: true,
+          message: `File shared with ${selectedUser.fullName || selectedUser.username}`,
+          type: "success",
+        });
+        closeShareModal();
+      } else {
+        setToast({
+          visible: true,
+          message: result.error || "Failed to share file",
+          type: "error",
+        });
+      }
+    } catch (error: any) {
       setToast({
         visible: true,
-        message: "Failed to send file",
+        message: error.message || "Failed to share file",
         type: "error",
       });
     } finally {
-      setSending(false);
+      setSharing(false);
     }
   }
 
-  function closeSendModal() {
-    if (!sending) {
-      setShowSendModal(false);
-      setRecipientEmail("");
-      setEmailError("");
+  function closeShareModal() {
+    if (!sharing) {
+      setShowShareModal(false);
+      setSearchQuery("");
+      setSearchResults([]);
+      setSelectedUser(null);
     }
   }
-
-  // Compute validation once to avoid multiple calls in render
-  const isEmailValid = validateEmail(recipientEmail).valid;
 
   if (loading) {
     return <LoadingSpinner message="Loading file details..." />;
@@ -246,9 +273,23 @@ export default function FileViewerScreen() {
 
             <View style={styles.divider} />
 
+            {file.fileSize && (
+              <>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Size</Text>
+                  <Text style={styles.detailValue}>
+                    {formatFileSize(file.fileSize)}
+                  </Text>
+                </View>
+                <View style={styles.divider} />
+              </>
+            )}
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Uploaded By</Text>
-              <Text style={styles.detailValue}>{file.uploadedByEmail}</Text>
+              <Text style={styles.detailValue}>
+                {file.uploadedByUsername || file.uploadedByEmail || "You"}
+              </Text>
             </View>
 
             <View style={styles.divider} />
@@ -259,18 +300,6 @@ export default function FileViewerScreen() {
                 {formatTimestamp(file.timestamp)}
               </Text>
             </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Local Path</Text>
-              <Text
-                style={[styles.detailValue, styles.pathText]}
-                numberOfLines={2}
-              >
-                {file.localFilePath}
-              </Text>
-            </View>
           </View>
 
           {/* Action Buttons */}
@@ -278,7 +307,7 @@ export default function FileViewerScreen() {
             <TouchableOpacity
               style={[styles.compactButton, styles.primaryButton]}
               onPress={handleOpen}
-              disabled={opening || deleting || sending}
+              disabled={opening || deleting || sharing}
               activeOpacity={0.7}
             >
               {opening ? (
@@ -293,18 +322,18 @@ export default function FileViewerScreen() {
 
             <TouchableOpacity
               style={[styles.compactButton, styles.secondaryButton]}
-              onPress={handleSendPress}
-              disabled={opening || deleting || sending}
+              onPress={handleSharePress}
+              disabled={opening || deleting || sharing}
               activeOpacity={0.7}
             >
-              <Ionicons name="send" size={20} color={Colors.primary} />
-              <Text style={styles.compactButtonTextSecondary}>Send</Text>
+              <Ionicons name="share-social" size={20} color={Colors.primary} />
+              <Text style={styles.compactButtonTextSecondary}>Share</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.compactButton, styles.dangerButton]}
               onPress={handleDelete}
-              disabled={opening || deleting || sending}
+              disabled={opening || deleting || sharing}
               activeOpacity={0.7}
             >
               {deleting ? (
@@ -320,20 +349,20 @@ export default function FileViewerScreen() {
         </View>
       </ScrollView>
 
-      {/* Send File Modal */}
+      {/* Share File Modal */}
       <Modal
-        visible={showSendModal}
+        visible={showShareModal}
         transparent={true}
         animationType="fade"
-        onRequestClose={closeSendModal}
+        onRequestClose={closeShareModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Send File</Text>
+              <Text style={styles.modalTitle}>Share File</Text>
               <TouchableOpacity
-                onPress={closeSendModal}
-                disabled={sending}
+                onPress={closeShareModal}
+                disabled={sharing}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
@@ -341,40 +370,115 @@ export default function FileViewerScreen() {
             </View>
 
             <View style={styles.modalBody}>
-              {senderEmail && (
-                <View style={styles.senderInfo}>
-                  <Text style={styles.senderLabel}>From</Text>
-                  <Text style={styles.senderEmail}>{senderEmail}</Text>
+              <Text style={styles.modalLabel}>Search for a user</Text>
+
+              <View style={styles.searchContainer}>
+                <Ionicons
+                  name="search"
+                  size={20}
+                  color={Colors.textMuted}
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by username or name..."
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!sharing}
+                />
+                {searching && (
+                  <ActivityIndicator
+                    color={Colors.primary}
+                    size="small"
+                    style={styles.searchSpinner}
+                  />
+                )}
+              </View>
+
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <View style={styles.searchResults}>
+                  <FlatList
+                    data={searchResults}
+                    keyExtractor={(item) =>
+                      item.username ?? item.email ?? item.id.toString()
+                    }
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.userItem}
+                        onPress={() => handleSelectUser(item)}
+                      >
+                        <View style={styles.userAvatar}>
+                          <Ionicons
+                            name="person-circle"
+                            size={40}
+                            color={Colors.primary}
+                          />
+                        </View>
+                        <View style={styles.userInfo}>
+                          <Text style={styles.userFullName}>
+                            {item.fullName}
+                          </Text>
+                          <Text style={styles.userUsername}>
+                            @{item.username}
+                          </Text>
+                          {item.email ? (
+                            <Text style={styles.userEmail}>{item.email}</Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    style={styles.resultsList}
+                    nestedScrollEnabled
+                  />
                 </View>
               )}
 
-              <Text style={styles.modalLabel}>
-                Enter recipient's email address
-              </Text>
+              {/* Selected User */}
+              {selectedUser && (
+                <View style={styles.selectedUser}>
+                  <Text style={styles.selectedLabel}>Share with:</Text>
+                  <View style={styles.selectedUserInfo}>
+                    <Ionicons
+                      name="person-circle"
+                      size={32}
+                      color={Colors.primary}
+                    />
+                    <View style={styles.selectedUserText}>
+                      <Text style={styles.selectedUserName}>
+                        {selectedUser.fullName}
+                      </Text>
+                      <Text style={styles.selectedUserUsername}>
+                        @{selectedUser.username}
+                      </Text>
+                      {selectedUser.email ? (
+                        <Text style={styles.selectedUserEmail}>
+                          {selectedUser.email}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedUser(null);
+                        setSearchQuery("");
+                      }}
+                    >
+                      <Ionicons
+                        name="close-circle"
+                        size={24}
+                        color={Colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
-              <InputField
-                label="Recipient Email"
-                placeholder="Enter email address"
-                value={recipientEmail}
-                onChangeText={(text) => {
-                  setRecipientEmail(text);
-                  const validation = validateEmail(text);
-                  setEmailError(
-                    !validation.valid && text.length > 0
-                      ? validation.error
-                      : "",
-                  );
-                }}
-                keyboardType="email-address"
-                editable={!sending}
-                autoCapitalize="none"
-                autoCorrect={false}
-                error={emailError}
-              />
-
-              {sending && (
-                <View style={styles.sendingContainer}>
-                  <LoadingSpinner message="Sending file..." />
+              {sharing && (
+                <View style={styles.sharingContainer}>
+                  <ActivityIndicator color={Colors.primary} size="small" />
+                  <Text style={styles.sharingText}>Sharing file...</Text>
                 </View>
               )}
             </View>
@@ -382,25 +486,18 @@ export default function FileViewerScreen() {
             <View style={styles.modalFooter}>
               <Button
                 title="Cancel"
-                onPress={closeSendModal}
+                onPress={closeShareModal}
                 variant="secondary"
-                disabled={sending}
+                disabled={sharing}
                 style={styles.cancelButton}
               />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!isEmailValid || sending) && styles.sendButtonDisabled,
-                ]}
-                onPress={handleSendFile}
-                disabled={!isEmailValid || sending}
-              >
-                {sending ? (
-                  <ActivityIndicator color={Colors.textWhite} size="small" />
-                ) : (
-                  <Ionicons name="send" size={20} color={Colors.textWhite} />
-                )}
-              </TouchableOpacity>
+              <Button
+                title="Share"
+                onPress={handleShareFile}
+                disabled={!selectedUser || sharing}
+                loading={sharing}
+                style={styles.shareButton}
+              />
             </View>
           </View>
         </View>
@@ -470,11 +567,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Colors.textPrimary,
   },
-  pathText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontFamily: "monospace",
-  },
+
   divider: {
     height: 1,
     backgroundColor: Colors.borderLight,
@@ -522,13 +615,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.primary,
   },
-  actionButton: {
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
   errorText: {
     fontSize: 16,
     color: Colors.error,
@@ -565,36 +651,116 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 24,
   },
-  senderInfo: {
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-  },
-  senderLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  senderEmail: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.primary,
-  },
   modalLabel: {
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 16,
     fontWeight: "500",
   },
-  sendingContainer: {
-    marginTop: 24,
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.backgroundAccent,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  searchSpinner: {
+    marginLeft: 8,
+  },
+  searchResults: {
+    maxHeight: 200,
+    marginTop: 12,
+    backgroundColor: Colors.backgroundWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  resultsList: {
+    maxHeight: 200,
+  },
+  userItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  userAvatar: {
+    marginRight: 12,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userFullName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  userUsername: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  userEmail: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  selectedUser: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 12,
+  },
+  selectedLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  selectedUserInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  selectedUserText: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  selectedUserName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  selectedUserUsername: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  selectedUserEmail: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  sharingContainer: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 20,
+    marginTop: 16,
+    padding: 12,
+  },
+  sharingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   modalFooter: {
     flexDirection: "row",
@@ -607,16 +773,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
   },
-  sendButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonDisabled: {
-    backgroundColor: Colors.textMuted,
-    opacity: 0.5,
+  shareButton: {
+    flex: 1,
   },
 });

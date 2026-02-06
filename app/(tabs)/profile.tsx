@@ -1,11 +1,21 @@
+/**
+ * Profile Screen - Display user info from backend.
+ */
+
 import { Toast } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { getLoggedInUser, logout } from "@/services";
+import {
+  getLoggedInUser,
+  logout,
+  refreshUserProfile,
+  type StoredUserProfile,
+} from "@/services";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,44 +23,60 @@ import {
   View,
 } from "react-native";
 
-interface User {
-  id: number;
-  email: string;
-}
-
 export default function ProfileScreen() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<StoredUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [toast, setToast] = useState({
     visible: false,
     message: "",
     type: "success" as "success" | "error",
   });
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+    }, []),
+  );
 
   async function loadUserData() {
     try {
-      const userData = await getLoggedInUser();
-      setUser(userData as User);
-    } catch (error) {
-      console.error("Failed to load user data:", error);
-      const anyErr = error as any;
-      let errorMsg = "Failed to load profile";
-      if (anyErr?.code === "AUTH_ERROR" || !anyErr?.code) {
-        errorMsg = "Session expired. Please login again.";
+      // First try local storage
+      let userData = await getLoggedInUser();
+
+      // If we have a token, try refreshing from backend
+      if (userData) {
+        const refreshed = await refreshUserProfile();
+        if (refreshed) {
+          userData = refreshed;
+        }
       }
+
+      setUser(userData);
+    } catch (error: any) {
+      console.error("Failed to load user data:", error);
       setToast({
         visible: true,
-        message: errorMsg,
+        message: error.message || "Failed to load profile",
         type: "error",
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const refreshed = await refreshUserProfile();
+      if (refreshed) {
+        setUser(refreshed);
+      }
+    } catch (error) {
+      console.error("Refresh failed:", error);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -74,6 +100,7 @@ export default function ProfileScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -84,14 +111,28 @@ export default function ProfileScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
+          <Ionicons name="person-circle" size={64} color={Colors.iconMuted} />
           <Text style={styles.loadingText}>Unable to load profile</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadUserData}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <Toast
         visible={toast.visible}
         message={toast.message}
@@ -104,12 +145,50 @@ export default function ProfileScreen() {
         {/* Avatar */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Ionicons name="person-circle" size={64} color={Colors.primary} />
+            <Ionicons name="person-circle" size={80} color={Colors.primary} />
           </View>
+          {user.fullName && (
+            <Text style={styles.fullName}>{user.fullName}</Text>
+          )}
+          {user.username && (
+            <Text style={styles.username}>@{user.username}</Text>
+          )}
         </View>
 
         {/* User Info */}
         <View style={styles.infoSection}>
+          {/* Full Name */}
+          {user.fullName && (
+            <View style={styles.infoRow}>
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color={Colors.primary}
+                style={styles.infoIcon}
+              />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Full Name</Text>
+                <Text style={styles.infoValue}>{user.fullName}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Username */}
+          {user.username && (
+            <View style={styles.infoRow}>
+              <Ionicons
+                name="at-outline"
+                size={20}
+                color={Colors.primary}
+                style={styles.infoIcon}
+              />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Username</Text>
+                <Text style={styles.infoValue}>@{user.username}</Text>
+              </View>
+            </View>
+          )}
+
           {/* Email */}
           <View style={styles.infoRow}>
             <Ionicons
@@ -124,19 +203,17 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Member Since */}
+          {/* User ID (for debugging/reference) */}
           <View style={styles.infoRow}>
             <Ionicons
-              name="calendar-outline"
+              name="finger-print-outline"
               size={20}
               color={Colors.primary}
               style={styles.infoIcon}
             />
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Member Since</Text>
-              <Text style={styles.infoValue}>
-                {new Date().toLocaleDateString()}
-              </Text>
+              <Text style={styles.infoLabel}>User ID</Text>
+              <Text style={styles.infoValue}>{user.id}</Text>
             </View>
           </View>
         </View>
@@ -185,6 +262,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textMuted,
     fontWeight: "500",
+    marginTop: 12,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: Colors.textWhite,
+    fontWeight: "600",
+    fontSize: 14,
   },
   card: {
     backgroundColor: Colors.backgroundWhite,
@@ -200,27 +290,32 @@ const styles = StyleSheet.create({
   avatarContainer: {
     alignItems: "center",
     marginBottom: 24,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.backgroundAccent,
-    justifyContent: "center",
-    alignItems: "center",
+    marginBottom: 12,
+  },
+  fullName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  username: {
+    fontSize: 16,
+    color: Colors.textSecondary,
   },
   infoSection: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-    paddingTop: 16,
+    gap: 16,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 20,
   },
   infoIcon: {
-    marginRight: 16,
+    marginRight: 12,
     marginTop: 2,
   },
   infoContent: {
@@ -228,52 +323,42 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
+    marginBottom: 4,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 4,
   },
   infoValue: {
     fontSize: 16,
-    fontWeight: "600",
     color: Colors.textPrimary,
+    fontWeight: "500",
   },
   actionSection: {
     marginBottom: 24,
-    paddingHorizontal: 16,
-    alignItems: "center",
   },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
     backgroundColor: Colors.error,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    width: "30%",
     alignSelf: "center",
   },
   logoutButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
     color: Colors.textWhite,
+    fontSize: 16,
+    fontWeight: "700",
   },
   footerSection: {
     alignItems: "center",
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
   footerText: {
     fontSize: 12,
     color: Colors.textMuted,
-    fontWeight: "500",
   },
 });
