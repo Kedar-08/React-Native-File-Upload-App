@@ -1,32 +1,27 @@
 # React Native File Upload App
 
-A simple Expo-based React Native app for uploading, viewing and managing files from a device. This project demonstrates a small production-like flow with authentication, file picking, local storage and a dashboard UI.
+A React Native (Expo) app for uploading, viewing and sharing files. The project is organized with a service-driven architecture so UI code never calls HTTP directly; this makes it easy to swap between a mock API during development and a real backend later.
 
-**Key features**
+## Key features
 
 - Upload files from device storage using a file picker
-- Preview and view uploaded files in-app (images, documents)
-- Download or share files from the app
-- Authentication flow (signup / login) with token storage
-- Simple dashboard listing uploaded files with metadata
-- Local persistence using SQLite for file metadata
+- Preview and open files in-app (images, documents, media)
+- Share files with other users (search by username/email)
+- Inbox: files shared with you with unread state and remove-from-inbox
+- File-level actions: download/open, delete (owner)
+- Filter files by type (Documents, Images, Videos, Audio, Others) in Dashboard and Inbox
+- Centralized services, adapters, and an optional mock API for frontend work
 
-**Tech stack (with versions)**
+## Tech stack (high level)
 
-- Expo: ~54.0.33
-- React: 19.1.0
-- React Native: 0.81.5
-- Expo Router: ~6.0.23
-- TypeScript: ~5.9.2 (dev)
-- Formik: ^2.4.9
-- Yup: ^1.7.1
-- Expo packages: expo-file-system ~19.0.21, expo-document-picker ~14.0.8, expo-secure-store ~15.0.8, expo-sqlite ~16.0.10
-
-See `package.json` for the full list of dependencies and exact versions.
+- Expo, React, React Native (see `package.json` for exact versions)
+- TypeScript for type safety
+- Axios for HTTP (centralized in `services/api-client.ts`)
+- Expo packages: file-system, document-picker, secure-store, etc.
 
 ## Getting started (development)
 
-1. Install repository dependencies
+1. Install dependencies
 
 ```bash
 npm install
@@ -38,15 +33,13 @@ npm install
 npx expo start
 ```
 
-3. Run the app
-
-- Android emulator or device (recommended dev-build for native modules):
+3. Run the app (Android recommended for full feature set)
 
 ```bash
 npx expo run:android
 ```
 
-- Or open in Expo Go from the Metro output QR code (limited native support).
+Or open in Expo Go from the Metro QR code (some native features may be limited).
 
 ## USB -> Wireless Android ADB (optional)
 
@@ -66,14 +59,44 @@ adb devices
 
 ## Project structure
 
-- `app/` — application routes and screens
+- `app/` — application routes and screens (expo-router)
 - `components/` — reusable UI components
-- `services/` — network, auth and file services
-- `storage/` — local DB and token storage
+- `services/` — API client, auth/file/share/user services, adapters, and mock API
+- `storage/` — token helpers and local persistence helpers
 
-## Notes
+## Mock API and switching to a real backend
 
--- This project targets Android only and uses file-based routing from `expo-router` — edit files inside `app/` to add or change screens.
--- For native modules or working with device file APIs, prefer running on an Android emulator/device or a development build rather than Expo Go.
+- The repo includes a mock API adapter for frontend development. It is enabled by default.
+- To switch to a real backend: set `ENABLE_MOCK_API = false` in `services/mock-api.ts` and update `API_BASE_URL` in `services/api-client.ts`.
+- Adapters in `services/adapters/` translate backend responses to the app's internal models; update them if your backend uses different field names.
+
+## Linting & tests
+
+- Lint:
+
+```bash
+npm run lint
+```
+
+- Tests (if present):
+
+```bash
+npm test
+```
+
+## Notes for backend integration
+
+- Recommended endpoints (logical operations; exact paths negotiable):
+	- Auth: `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`
+	- Files: `POST /files/upload`, `GET /files/my-files`, `GET /files/:id`, `DELETE /files/:id`, `GET /files/check-duplicate`
+	- Shares: `POST /shares`, `GET /shares/inbox`, `GET /shares/unread-count`, `PATCH /shares/:id/read`, `DELETE /shares/:id`
+	- Users: `GET /users/search`, `GET /users/:id`, `GET /users/username/:username`
+
+- Frontend expects stable IDs and download URLs (signed URLs are fine).
+
+## Branching & PRs
+
+- Ongoing work is on `feature/backend-refactor` (contains mock API and adapter changes); keep `main` stable.
+- Open a PR for merging: run lint/tests locally, push the branch, then create a PR on GitHub and wait for CI/reviews.
 
 ---
