@@ -50,7 +50,7 @@ export default function LoginScreen() {
 
   async function handleLogin(
     values: { email: string; password: string },
-    { setErrors }: any
+    { setErrors }: any,
   ) {
     try {
       const loginData: LoginData = {
@@ -119,9 +119,7 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                error={
-                  touched.email && errors.email ? errors.email : undefined
-                }
+                error={touched.email && errors.email ? errors.email : undefined}
               />
 
               <InputField
@@ -150,7 +148,7 @@ export default function LoginScreen() {
         </Formik>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account?</Text>
+          <Text style={styles.footerText}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={goToSignup}>
             <Text style={styles.signupLink}>Sign Up</Text>
           </TouchableOpacity>

@@ -35,7 +35,7 @@ export default function TabsLayout() {
   useFocusEffect(
     useCallback(() => {
       loadUnreadCount();
-    }, [])
+    }, []),
   );
 
   async function loadUnreadCount() {
@@ -51,7 +51,7 @@ export default function TabsLayout() {
   const processDuplicateCheck = useCallback(
     async (
       assets: DocumentPicker.DocumentPickerAsset[],
-      userIdParam: number
+      userIdParam: number,
     ) => {
       setUserId(userIdParam);
       setPendingAssets(assets);
@@ -71,7 +71,7 @@ export default function TabsLayout() {
         }
       }
     },
-    []
+    [],
   );
 
   const handleUploadAgain = useCallback(async () => {
@@ -130,7 +130,10 @@ export default function TabsLayout() {
   }, [currentAssetIndex, pendingAssets, approvedAssets, userId]);
 
   const performUpload = useCallback(
-    async (assets: DocumentPicker.DocumentPickerAsset[], userIdParam: number) => {
+    async (
+      assets: DocumentPicker.DocumentPickerAsset[],
+      userIdParam: number,
+    ) => {
       try {
         // Create a fake result object for uploadMultipleFiles
         const fakeResult = {
@@ -140,14 +143,14 @@ export default function TabsLayout() {
 
         const { saved, failed } = await uploadMultipleFiles(
           fakeResult as any,
-          userIdParam
+          userIdParam,
         );
 
         console.log(
           "Upload result - Saved:",
           saved.length,
           "Failed:",
-          failed.length
+          failed.length,
         );
 
         // Navigate to dashboard and pass result params
@@ -163,7 +166,7 @@ export default function TabsLayout() {
         console.error("Error uploading files:", error);
       }
     },
-    [router]
+    [router],
   );
 
   const handleUploadPress = useCallback(async () => {
@@ -325,8 +328,8 @@ export default function TabsLayout() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Duplicate File</Text>
             <Text style={styles.modalMessage}>
-              File "{duplicateFile}" already exists. Do you want to upload it
-              again?
+              File &quot;{duplicateFile}&quot; already exists. Do you want to
+              upload it again?
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
