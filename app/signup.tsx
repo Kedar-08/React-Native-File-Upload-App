@@ -1,6 +1,10 @@
+/**
+ * Signup Screen - Create new account with backend API.
+ */
+
 import { Button, InputField } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { signup } from "@/services";
+import { signup, type SignupData } from "@/services";
 import { router } from "expo-router";
 import { Formik } from "formik";
 import React from "react";
@@ -16,6 +20,18 @@ import {
 import * as Yup from "yup";
 
 const signupSchema = Yup.object().shape({
+  fullName: Yup.string()
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .required("Full name is required"),
+  username: Yup.string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .matches(
+      /^[a-zA-Z0-9_]+$/,
+      "Username can only contain letters, numbers, and underscores"
+    )
+    .required("Username is required"),
   email: Yup.string()
     .email("Invalid email format")
     .required("Email is required"),
@@ -24,36 +40,42 @@ const signupSchema = Yup.object().shape({
     .required("Password is required"),
   confirmPassword: Yup.string()
     .required("Please confirm your password")
-    .test(
-      "passwords-match",
-      "Passwords must match",
-      function (confirmPassword) {
-        return (
-          (confirmPassword || "").trim() === (this.parent.password || "").trim()
-        );
-      },
-    ),
+    .test("passwords-match", "Passwords must match", function (confirmPassword) {
+      return (
+        (confirmPassword || "").trim() === (this.parent.password || "").trim()
+      );
+    }),
 });
+
+interface SignupFormValues {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
 
 export default function SignupScreen() {
   async function handleSignup(
-    values: {
-      email: string;
-      password: string;
-      confirmPassword: string;
-    },
-    { setErrors }: any,
+    values: SignupFormValues,
+    { setErrors }: any
   ) {
     try {
-      const result = await signup(values.email, values.password.trim());
+      const signupData: SignupData = {
+        fullName: values.fullName.trim(),
+        username: values.username.trim().toLowerCase(),
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      };
+
+      const result = await signup(signupData);
 
       if (result.success) {
-        router.replace("/dashboard");
+        router.replace("/(tabs)/dashboard");
       } else {
-        if (result.field === "email") {
-          setErrors({ email: result.message });
-        } else if (result.field === "password") {
-          setErrors({ password: result.message });
+        // Map error to specific field
+        if (result.field) {
+          setErrors({ [result.field]: result.message });
         } else {
           setErrors({ email: result.message });
         }
@@ -84,6 +106,8 @@ export default function SignupScreen() {
 
           <Formik
             initialValues={{
+              fullName: "",
+              username: "",
               email: "",
               password: "",
               confirmPassword: "",
@@ -101,6 +125,36 @@ export default function SignupScreen() {
               isSubmitting,
             }) => (
               <View style={styles.form}>
+                <InputField
+                  label="Full Name"
+                  placeholder="Enter your full name"
+                  value={values.fullName}
+                  onChangeText={handleChange("fullName")}
+                  onBlur={handleBlur("fullName")}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  error={
+                    touched.fullName && errors.fullName
+                      ? errors.fullName
+                      : undefined
+                  }
+                />
+
+                <InputField
+                  label="Username"
+                  placeholder="Choose a unique username"
+                  value={values.username}
+                  onChangeText={handleChange("username")}
+                  onBlur={handleBlur("username")}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={
+                    touched.username && errors.username
+                      ? errors.username
+                      : undefined
+                  }
+                />
+
                 <InputField
                   label="Email"
                   placeholder="Enter your email"
@@ -155,9 +209,9 @@ export default function SignupScreen() {
           </Formik>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={styles.footerText}>Already have an account?</Text>
             <TouchableOpacity onPress={goToLogin}>
-              <Text style={styles.linkText}>Sign In</Text>
+              <Text style={styles.loginLink}>Sign In</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -176,47 +230,43 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: "center",
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingTop: 60,
+    paddingBottom: 24,
   },
   header: {
-    alignItems: "center",
-    marginBottom: 48,
+    marginBottom: 32,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "800",
     color: Colors.textPrimary,
     marginBottom: 8,
-    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
     color: Colors.textSecondary,
   },
   form: {
-    backgroundColor: Colors.backgroundWhite,
-    padding: 28,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    gap: 16,
   },
   signupButton: {
-    marginTop: 12,
+    marginTop: 8,
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
     marginTop: 32,
+    gap: 8,
   },
   footerText: {
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.textSecondary,
   },
-  linkText: {
-    fontSize: 15,
-    color: Colors.primary,
+  loginLink: {
+    fontSize: 14,
     fontWeight: "700",
+    color: Colors.primary,
   },
 });

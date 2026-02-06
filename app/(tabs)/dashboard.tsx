@@ -1,6 +1,10 @@
+/**
+ * Dashboard Screen - My uploaded files from backend.
+ */
+
 import { FileItem, LoadingSpinner, Toast } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { getAllFiles, isLoggedIn, type FileMetadata } from "@/services";
+import { getMyFiles, isLoggedIn, type FileMetadata } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -120,7 +124,6 @@ export default function DashboardScreen() {
         router.replace("/");
         return;
       }
-
       await loadFiles();
     } catch (error) {
       console.error("Auth check error:", error);
@@ -130,24 +133,18 @@ export default function DashboardScreen() {
 
   async function loadFiles() {
     try {
-      const allFiles = await getAllFiles();
-      // Ensure display order is newest first (descending by timestamp)
-      const sorted = allFiles.slice().sort((a, b) => {
-        const ta = Date.parse(a.timestamp as string) || 0;
-        const tb = Date.parse(b.timestamp as string) || 0;
-        return tb - ta;
-      });
+      const allFiles = await getMyFiles();
+      // Sort by timestamp descending (newest first)
+      const sorted = allFiles.sort(
+        (a: FileMetadata, b: FileMetadata) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      );
       setFiles(sorted);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load files:", error);
-      const anyErr = error as any;
-      let errorMsg = "Failed to load files";
-      if (anyErr?.code === "DB_ERROR") {
-        errorMsg = "Database error. Try restarting the app.";
-      }
       setToast({
         visible: true,
-        message: errorMsg,
+        message: error.message || "Failed to load files",
         type: "error",
       });
     } finally {
@@ -164,7 +161,9 @@ export default function DashboardScreen() {
   const filteredFiles =
     selectedFilter === "all"
       ? files
-      : files.filter((file) => getFileType(file.fileName) === selectedFilter);
+      : files.filter(
+          (file) => getFileType(file.fileName ?? "") === selectedFilter,
+        );
 
   function handleFilePress(file: FileMetadata) {
     router.push({

@@ -1,3 +1,8 @@
+/**
+ * Authentication service for backend-driven auth.
+ * Handles signup, login, logout, and session management.
+ */
+
 import {
   clearAuthData,
   getCurrentUser,
@@ -6,39 +11,95 @@ import {
   saveToken,
   type StoredUser,
 } from "@/storage";
-import { createUser, findUserByEmail, verifyPassword } from "./db-service";
+import { adaptAuthTokenResponse } from "./adapters/auth-adapter";
+import apiClient from "./api-client";
+import { normalizeError } from "./normalize-error";
+
+// Extended stored user with backend fields
+export interface StoredUserProfile extends StoredUser {
+  fullName?: string;
+  username?: string;
+}
 
 export interface AuthResult {
   success: boolean;
   message: string;
-  user?: StoredUser;
+  user?: StoredUserProfile;
   token?: string;
-  field?: "email" | "password";
+  field?: "fullName" | "username" | "email" | "password" | "confirmPassword";
 }
 
-// Generate a simple auth token
-function generateToken(userId: number, email: string): string {
-  const timestamp = Date.now();
-  const randomPart = Math.random().toString(36).substring(2, 15);
-  return `${userId}-${timestamp}-${randomPart}`;
+export interface SignupData {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
 }
 
-// Sign up a new user
-export async function signup(
-  email: string,
-  password: string,
-): Promise<AuthResult> {
+export interface LoginData {
+  email: string;
+  password: string;
+}
+
+// Backend response types
+interface AuthResponse {
+  token: string;
+  userId: number;
+  user: {
+    id: number;
+    email: string;
+    username: string;
+    fullName: string;
+  };
+}
+
+/**
+ * Sign up a new user via backend API.
+ */
+export async function signup(data: SignupData): Promise<AuthResult> {
   try {
-    // Validate inputs
-    if (!email || !password) {
+    // Frontend validation
+    if (!data.fullName?.trim()) {
       return {
         success: false,
-        message: "Email and password are required",
-        field: !email ? "email" : "password",
+        message: "Full name is required",
+        field: "fullName",
       };
     }
 
-    if (!email.includes("@")) {
+    if (!data.username?.trim()) {
+      return {
+        success: false,
+        message: "Username is required",
+        field: "username",
+      };
+    }
+
+    if (data.username.length < 3) {
+      return {
+        success: false,
+        message: "Username must be at least 3 characters",
+        field: "username",
+      };
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(data.username)) {
+      return {
+        success: false,
+        message: "Username can only contain letters, numbers, and underscores",
+        field: "username",
+      };
+    }
+
+    if (!data.email?.trim()) {
+      return {
+        success: false,
+        message: "Email is required",
+        field: "email",
+      };
+    }
+
+    if (!data.email.includes("@")) {
       return {
         success: false,
         message: "Please enter a valid email",
@@ -46,7 +107,15 @@ export async function signup(
       };
     }
 
-    if (password.length < 6) {
+    if (!data.password) {
+      return {
+        success: false,
+        message: "Password is required",
+        field: "password",
+      };
+    }
+
+    if (data.password.length < 6) {
       return {
         success: false,
         message: "Password must be at least 6 characters",
@@ -54,17 +123,21 @@ export async function signup(
       };
     }
 
-    // Create user in database
-    const user = await createUser(email.toLowerCase().trim(), password);
+    // Call backend signup API
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.post<AuthResponse>("/auth/signup", {
+      fullName: data.fullName.trim(),
+      username: data.username.trim().toLowerCase(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    });
 
-    // Generate token
-    const token = generateToken(user.id, user.email);
+    // Use adapter to map backend response to internal model
+    const { token, user } = adaptAuthTokenResponse(response.data);
 
     // Store token and user info
-    const storedUser: StoredUser = {
-      id: user.id,
-      email: user.email,
-    };
+    const storedUser: StoredUserProfile = user;
+
     await saveToken(token);
     await saveCurrentUser(storedUser);
 
@@ -74,48 +147,57 @@ export async function signup(
       user: storedUser,
       token,
     };
-  } catch (error) {
-    // Support both Error instances and normalized error objects thrown by services
-    const anyErr = error as any;
-    const errorMessage =
-      (anyErr && anyErr.message) ||
-      (error instanceof Error && error.message) ||
-      "Signup failed";
-    return { success: false, message: errorMessage };
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    // Handle specific backend errors
+    if (ne.code === "USERNAME_TAKEN") {
+      return {
+        success: false,
+        message: "Username is already taken",
+        field: "username",
+      };
+    }
+    if (ne.code === "EMAIL_EXISTS") {
+      return {
+        success: false,
+        message: "Email is already registered",
+        field: "email",
+      };
+    }
+
+    return {
+      success: false,
+      message: ne.message || "Signup failed",
+    };
   }
 }
 
-// Login an existing user
-export async function login(
-  email: string,
-  password: string,
-): Promise<AuthResult> {
+/**
+ * Login an existing user via backend API.
+ */
+export async function login(data: LoginData): Promise<AuthResult> {
   try {
-    // Validate inputs
-    if (!email || !password) {
-      return { success: false, message: "Email and password are required" };
+    // Frontend validation
+    if (!data.email || !data.password) {
+      return {
+        success: false,
+        message: "Email and password are required",
+      };
     }
 
-    // Find user
-    const user = await findUserByEmail(email.toLowerCase().trim());
+    // Call backend login API
+    // TODO: Replace with actual endpoint when backend is ready
+    const response = await apiClient.post<AuthResponse>("/auth/login", {
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    });
 
-    if (!user) {
-      return { success: false, message: "Invalid email", field: "email" };
-    }
-
-    // Verify password
-    if (!verifyPassword(password, user.password)) {
-      return { success: false, message: "Invalid password", field: "password" };
-    }
-
-    // Generate token
-    const token = generateToken(user.id, user.email);
+    // Use adapter to map backend response to internal model
+    const { token, user } = adaptAuthTokenResponse(response.data);
 
     // Store token and user info
-    const storedUser: StoredUser = {
-      id: user.id,
-      email: user.email,
-    };
+    const storedUser: StoredUserProfile = user;
+
     await saveToken(token);
     await saveCurrentUser(storedUser);
 
@@ -125,32 +207,75 @@ export async function login(
       user: storedUser,
       token,
     };
-  } catch (error) {
-    const anyErr = error as any;
-    const errorMessage =
-      (anyErr && anyErr.message) ||
-      (error instanceof Error && error.message) ||
-      "Login failed";
-    return { success: false, message: errorMessage };
+  } catch (error: any) {
+    const ne = normalizeError(error);
+    if (ne.code === "INVALID_CREDENTIALS") {
+      return {
+        success: false,
+        message: "Invalid email or password",
+        field: "password",
+      };
+    }
+    if (ne.code === "USER_NOT_FOUND") {
+      return {
+        success: false,
+        message: "No account found with this email",
+        field: "email",
+      };
+    }
+
+    return {
+      success: false,
+      message: ne.message || "Login failed",
+    };
   }
 }
 
-// Logout the current user
+/**
+ * Logout the current user.
+ */
 export async function logout(): Promise<void> {
-  await clearAuthData();
+  try {
+    // Optionally notify backend of logout
+    await apiClient.post("/auth/logout").catch(() => {
+      // Ignore errors - we'll clear local data anyway
+    });
+  } finally {
+    await clearAuthData();
+  }
 }
 
-// Check if user is logged in
+/**
+ * Check if user is logged in with a valid token.
+ */
 export async function isLoggedIn(): Promise<boolean> {
   const token = await getToken();
   const user = await getCurrentUser();
   return !!(token && user);
 }
 
-// Get current logged in user
-export async function getLoggedInUser(): Promise<StoredUser | null> {
-  const token = await getToken();
-  if (!token) return null;
+/**
+ * Get current logged in user from local storage.
+ */
+export async function getLoggedInUser(): Promise<StoredUserProfile | null> {
+  return getCurrentUser() as Promise<StoredUserProfile | null>;
+}
 
-  return await getCurrentUser();
+/**
+ * Refresh user profile from backend.
+ */
+export async function refreshUserProfile(): Promise<StoredUserProfile | null> {
+  try {
+    const response = await apiClient.get("/auth/me");
+    // Use adapter to map backend user response
+    const adaptUserResponse = (await import("./adapters/auth-adapter"))
+      .adaptUserResponse;
+    const storedUser = adaptUserResponse(response.data);
+
+    await saveCurrentUser(storedUser);
+    return storedUser;
+  } catch (error) {
+    console.error("Failed to refresh user profile:", error);
+    return null;
+  }
 }

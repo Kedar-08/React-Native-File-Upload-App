@@ -1,6 +1,10 @@
+/**
+ * Login Screen - Sign in with backend API.
+ */
+
 import { Button, InputField, LoadingSpinner } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { isLoggedIn, login } from "@/services";
+import { isLoggedIn, login, type LoginData } from "@/services";
 import { router } from "expo-router";
 import { Formik } from "formik";
 import React, { useEffect, useState } from "react";
@@ -49,7 +53,12 @@ export default function LoginScreen() {
     { setErrors }: any,
   ) {
     try {
-      const result = await login(values.email, values.password.trim());
+      const loginData: LoginData = {
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      };
+
+      const result = await login(loginData);
 
       if (result.success) {
         router.replace("/(tabs)/dashboard");
@@ -139,9 +148,9 @@ export default function LoginScreen() {
         </Formik>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
+          <Text style={styles.footerText}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={goToSignup}>
-            <Text style={styles.linkText}>Sign Up</Text>
+            <Text style={styles.signupLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -156,46 +165,43 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: "center",
     paddingHorizontal: 24,
+    paddingTop: 100,
+    paddingBottom: 24,
   },
   header: {
-    alignItems: "center",
-    marginBottom: 48,
+    marginBottom: 40,
   },
   title: {
     fontSize: 32,
     fontWeight: "800",
     color: Colors.textPrimary,
     marginBottom: 8,
-    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
     color: Colors.textSecondary,
   },
   form: {
-    backgroundColor: Colors.backgroundWhite,
-    padding: 28,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    gap: 16,
   },
   loginButton: {
-    marginTop: 12,
+    marginTop: 8,
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
     marginTop: 32,
+    gap: 8,
   },
   footerText: {
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.textSecondary,
   },
-  linkText: {
-    fontSize: 15,
-    color: Colors.primary,
+  signupLink: {
+    fontSize: 14,
     fontWeight: "700",
+    color: Colors.primary,
   },
 });
