@@ -5,6 +5,7 @@
 import { Toast } from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import {
+  formatTimestamp,
   getLoggedInUser,
   logout,
   refreshUserProfile,
@@ -44,18 +45,39 @@ export default function ProfileScreen() {
     try {
       // First try local storage
       let userData = await getLoggedInUser();
+      console.log("👤 Local stored user:", JSON.stringify(userData, null, 2));
 
       // If we have a token, try refreshing from backend
       if (userData) {
-        const refreshed = await refreshUserProfile();
-        if (refreshed) {
-          userData = refreshed;
+        try {
+          const refreshed = await refreshUserProfile();
+          console.log(
+            "🔄 Backend refreshed user:",
+            JSON.stringify(refreshed, null, 2),
+          );
+          if (refreshed) {
+            userData = refreshed;
+          }
+        } catch (refreshError) {
+          console.warn(
+            "⚠️ Failed to refresh from backend, using local:",
+            refreshError,
+          );
+          // Continue with local user data if refresh fails
         }
       }
 
+      if (!userData) {
+        throw new Error("No user data available");
+      }
+
+      console.log(
+        "✅ Final user data to display:",
+        JSON.stringify(userData, null, 2),
+      );
       setUser(userData);
     } catch (error: any) {
-      console.error("Failed to load user data:", error);
+      console.error("❌ Failed to load user data:", error);
       setToast({
         visible: true,
         message: error.message || "Failed to load profile",
@@ -72,9 +94,19 @@ export default function ProfileScreen() {
       const refreshed = await refreshUserProfile();
       if (refreshed) {
         setUser(refreshed);
+        setToast({
+          visible: true,
+          message: "Profile refreshed",
+          type: "success",
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Refresh failed:", error);
+      setToast({
+        visible: true,
+        message: error.message || "Failed to refresh profile",
+        type: "error",
+      });
     } finally {
       setRefreshing(false);
     }
@@ -83,14 +115,19 @@ export default function ProfileScreen() {
   async function handleLogout() {
     setLoggingOut(true);
     try {
+      // Logout is best-effort - backend API failure doesn't block UI logout
+      console.log("👤 [handleLogout] Starting logout...");
       await logout();
+      console.log("✅ [handleLogout] Logout complete - navigating to login");
+      // Navigate to login screen - logout() always clears auth data
       router.replace("/");
     } catch (error) {
-      console.error("Logout error:", error);
+      // logout() never throws, but catch for safety
+      console.error("❌ [handleLogout] Unexpected error:", error);
       setLoggingOut(false);
       setToast({
         visible: true,
-        message: "Failed to logout",
+        message: "Logout failed - please try again",
         type: "error",
       });
     }
@@ -203,19 +240,23 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* User ID (for debugging/reference) */}
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="finger-print-outline"
-              size={20}
-              color={Colors.primary}
-              style={styles.infoIcon}
-            />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>User ID</Text>
-              <Text style={styles.infoValue}>{user.id}</Text>
+          {/* Member Since */}
+          {user.createdAt && (
+            <View style={styles.infoRow}>
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={Colors.primary}
+                style={styles.infoIcon}
+              />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Member Since</Text>
+                <Text style={styles.infoValue}>
+                  {formatTimestamp(user.createdAt)}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </View>
 

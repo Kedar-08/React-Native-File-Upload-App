@@ -8,6 +8,7 @@ import type { FileMetadata } from "../file-service";
 
 export interface BackendFileResponse {
   id?: number;
+  file_id?: string; // UUID from backend
   fileName?: string;
   file_name?: string;
   name?: string;
@@ -17,15 +18,16 @@ export interface BackendFileResponse {
   mimeType?: string;
   mime_type?: string;
   fileSize?: number;
-  file_size?: number;
+  file_size?: number | string; // Backend sends as string
   size?: number;
   downloadUrl?: string;
   download_url?: string;
   url?: string;
   uploadedByUserId?: number;
   uploaded_by_user_id?: number;
+  uploaded_by?: string | number | { id: number }; // API #12: userId as string or number, or object
+  owner_id?: number | string; // Backend sends as string
   uploadedBy?: { id: number };
-  uploaded_by?: { id: number };
   uploadedByUsername?: string;
   uploaded_by_username?: string;
   uploadedByEmail?: string;
@@ -35,58 +37,74 @@ export interface BackendFileResponse {
   created_at?: string;
   uploadedAt?: string;
   uploaded_at?: string;
+  upload_time?: string;
+  file_path?: string; // API #12
   [key: string]: any;
 }
 
 /**
  * Adapt backend file response to internal FileMetadata model.
  * Flexible mapping handles snake_case, camelCase, and abbreviated keys.
+ * NOTE: File list endpoint doesn't return username/email, so we use owner_id instead.
+ * For current user's files, display "You". For shared files, fetch user info separately.
  */
 export function adaptFileResponse(
   backendFile: BackendFileResponse,
 ): FileMetadata {
-  const userId =
-    backendFile.uploadedByUserId ??
-    backendFile.uploaded_by_user_id ??
-    (backendFile.uploadedBy?.id || backendFile.uploaded_by?.id) ??
-    0;
+  // Handle uploaded_by: can be string (userId), number, or object with id
+  let uploadedByUserId = 0;
+  if (typeof backendFile.uploaded_by === "string") {
+    uploadedByUserId = parseInt(backendFile.uploaded_by) || 0;
+  } else if (typeof backendFile.uploaded_by === "number") {
+    uploadedByUserId = backendFile.uploaded_by;
+  } else if (
+    backendFile.uploaded_by &&
+    typeof backendFile.uploaded_by === "object" &&
+    "id" in backendFile.uploaded_by
+  ) {
+    uploadedByUserId = backendFile.uploaded_by.id;
+  }
 
-  const timestamp =
-    backendFile.timestamp ??
-    backendFile.createdAt ??
-    backendFile.created_at ??
-    backendFile.uploadedAt ??
-    backendFile.uploaded_at ??
-    new Date().toISOString();
+  // Fallback to owner_id or uploadedByUserId
+  if (uploadedByUserId === 0) {
+    uploadedByUserId = parseInt(
+      String(backendFile.owner_id ?? backendFile.uploadedByUserId ?? 0),
+    );
+  }
 
   return {
-    id: backendFile.id ?? 0,
-    fileName:
-      backendFile.fileName ??
+    id: backendFile.file_id ?? backendFile.id ?? "",
+    fileName: decodeURIComponent(
       backendFile.file_name ??
-      backendFile.name ??
-      "File",
+        backendFile.fileName ??
+        backendFile.name ??
+        "File",
+    ),
     fileType:
-      backendFile.fileType ??
       backendFile.file_type ??
-      backendFile.type ??
+      backendFile.fileType ??
       backendFile.mimeType ??
-      backendFile.mime_type ??
       "application/octet-stream",
-    fileSize:
-      backendFile.fileSize ?? backendFile.file_size ?? backendFile.size ?? 0,
-    uploadedByUserId: userId,
+    fileSize: parseInt(
+      String(backendFile.file_size ?? backendFile.fileSize ?? 0),
+    ),
+    uploadedByUserId,
+    // Backend doesn't return username/email in file list
+    // For current user's uploaded files, use "You"
+    // For shared files, fetch user info separately via API
     uploadedByUsername:
-      backendFile.uploadedByUsername ??
       backendFile.uploaded_by_username ??
-      "Unknown",
+      backendFile.uploadedByUsername ??
+      "You",
     uploadedByEmail:
-      backendFile.uploadedByEmail ??
-      backendFile.uploaded_by_email ??
-      "unknown@example.com",
-    timestamp,
+      backendFile.uploaded_by_email ?? backendFile.uploadedByEmail ?? "",
+    timestamp:
+      backendFile.upload_time ??
+      backendFile.uploaded_at ??
+      backendFile.created_at ??
+      new Date().toISOString(),
     downloadUrl:
-      backendFile.downloadUrl ?? backendFile.download_url ?? backendFile.url,
+      backendFile.download_url ?? backendFile.downloadUrl ?? backendFile.url,
   };
 }
 

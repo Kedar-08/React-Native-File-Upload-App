@@ -87,10 +87,10 @@ npm test
 ## Notes for backend integration
 
 - Recommended endpoints (logical operations; exact paths negotiable):
-	- Auth: `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`
-	- Files: `POST /files/upload`, `GET /files/my-files`, `GET /files/:id`, `DELETE /files/:id`, `GET /files/check-duplicate`
-	- Shares: `POST /shares`, `GET /shares/inbox`, `GET /shares/unread-count`, `PATCH /shares/:id/read`, `DELETE /shares/:id`
-	- Users: `GET /users/search`, `GET /users/:id`, `GET /users/username/:username`
+  - Auth: `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`
+  - Files: `POST /files/upload`, `GET /files/my-files`, `GET /files/:id`, `DELETE /files/:id`, `GET /files/check-duplicate`
+  - Shares: `POST /shares`, `GET /shares/inbox`, `GET /shares/unread-count`, `PATCH /shares/:id/read`, `DELETE /shares/:id`
+  - Users: `GET /users/search`, `GET /users/:id`, `GET /users/username/:username`
 
 - Frontend expects stable IDs and download URLs (signed URLs are fine).
 

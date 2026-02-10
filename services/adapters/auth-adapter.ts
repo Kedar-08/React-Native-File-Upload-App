@@ -13,7 +13,10 @@ export interface BackendAuthResponse {
   username?: string;
   fullName?: string;
   full_name?: string;
+  fullname?: string; // Backend sends lowercase
   name?: string;
+  createdAt?: string;
+  created_at?: string;
   [key: string]: any;
 }
 
@@ -41,7 +44,12 @@ export function adaptUserResponse(
     email: backendUser.email ?? "",
     username: backendUser.username ?? "",
     fullName:
-      backendUser.fullName ?? backendUser.full_name ?? backendUser.name ?? "",
+      backendUser.fullName ??
+      backendUser.full_name ??
+      backendUser.fullname ??
+      backendUser.name ??
+      "",
+    createdAt: backendUser.createdAt ?? backendUser.created_at,
   };
 }
 

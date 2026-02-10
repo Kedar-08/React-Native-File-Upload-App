@@ -29,42 +29,55 @@ const signupSchema = Yup.object().shape({
     .min(3, "Username must be at least 3 characters")
     .matches(
       /^[a-zA-Z0-9_]+$/,
-      "Username can only contain letters, numbers, and underscores"
+      "Username can only contain letters, numbers, and underscores",
     )
     .required("Username is required"),
   email: Yup.string()
     .email("Invalid email format")
     .required("Email is required"),
+  phoneNumber: Yup.string()
+    .required("Phone number is required")
+    .test(
+      "phone-digits",
+      "Phone number must be at least 10 digits",
+      function (value) {
+        const digits = (value || "").replace(/\D/g, "");
+        return digits.length >= 10;
+      },
+    ),
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
   confirmPassword: Yup.string()
     .required("Please confirm your password")
-    .test("passwords-match", "Passwords must match", function (confirmPassword) {
-      return (
-        (confirmPassword || "").trim() === (this.parent.password || "").trim()
-      );
-    }),
+    .test(
+      "passwords-match",
+      "Passwords must match",
+      function (confirmPassword) {
+        return (
+          (confirmPassword || "").trim() === (this.parent.password || "").trim()
+        );
+      },
+    ),
 });
 
 interface SignupFormValues {
   fullName: string;
   username: string;
   email: string;
+  phoneNumber: string;
   password: string;
   confirmPassword: string;
 }
 
 export default function SignupScreen() {
-  async function handleSignup(
-    values: SignupFormValues,
-    { setErrors }: any
-  ) {
+  async function handleSignup(values: SignupFormValues, { setErrors }: any) {
     try {
       const signupData: SignupData = {
         fullName: values.fullName.trim(),
         username: values.username.trim().toLowerCase(),
         email: values.email.trim().toLowerCase(),
+        phoneNumber: values.phoneNumber,
         password: values.password,
       };
 
@@ -109,6 +122,7 @@ export default function SignupScreen() {
               fullName: "",
               username: "",
               email: "",
+              phoneNumber: "",
               password: "",
               confirmPassword: "",
             }}
@@ -166,6 +180,22 @@ export default function SignupScreen() {
                   autoCorrect={false}
                   error={
                     touched.email && errors.email ? errors.email : undefined
+                  }
+                />
+
+                <InputField
+                  label="Phone Number"
+                  placeholder="Enter your phone number (min 10 digits)"
+                  value={values.phoneNumber}
+                  onChangeText={handleChange("phoneNumber")}
+                  onBlur={handleBlur("phoneNumber")}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={
+                    touched.phoneNumber && errors.phoneNumber
+                      ? errors.phoneNumber
+                      : undefined
                   }
                 />
 

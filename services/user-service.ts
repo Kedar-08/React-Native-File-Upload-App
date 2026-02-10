@@ -3,10 +3,7 @@
  * Handles user search, list, and profile operations.
  */
 
-import {
-  adaptPaginatedUserResponse,
-  adaptUserArray,
-} from "./adapters/user-adapter";
+import { adaptUserArray } from "./adapters/user-adapter";
 import apiClient from "./api-client";
 import { normalizeError } from "./normalize-error";
 
@@ -28,42 +25,6 @@ export interface UserSearchResult {
 }
 
 /**
- * Search users by username or name (Instagram-style).
- * Call this as user types in the search field.
- */
-export async function searchUsers(
-  query: string,
-  page: number = 1,
-  pageSize: number = 20,
-): Promise<UserSearchResult> {
-  try {
-    if (!query || query.trim().length < 2) {
-      return { users: [], hasMore: false };
-    }
-
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get("/users/search", {
-      params: {
-        q: query.trim(),
-        page,
-        pageSize,
-      },
-    });
-
-    // Use adapter to handle different backend response shapes
-    return adaptPaginatedUserResponse(response.data);
-  } catch (error: any) {
-    const ne = normalizeError(error);
-    console.error("User search failed:", ne);
-    throw {
-      message: ne.message || "Failed to search users",
-      code: ne.code || "SEARCH_ERROR",
-      original: ne.original ?? ne,
-    };
-  }
-}
-
-/**
  * Get a list of all users (for sharing suggestions).
  */
 export async function getUsers(
@@ -71,42 +32,39 @@ export async function getUsers(
   pageSize: number = 50,
 ): Promise<UserSearchResult> {
   try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get("/users", {
-      params: { page, pageSize },
-    });
+    console.log(
+      "📥 [getUsers] Fetching user list with page:",
+      page,
+      "pageSize:",
+      pageSize,
+    );
+
+    // Call backend API to get list of users
+    const response = await apiClient.get("/api/v1/users/user_list");
+    console.log("📨 [getUsers] Raw response.data type:", typeof response.data);
+    console.log(
+      "📨 [getUsers] Is response.data an array?",
+      Array.isArray(response.data),
+    );
+    console.log("📨 [getUsers] response.data:", response.data);
 
     // Use adapter to handle different backend response shapes
-    // Use adapter to handle different backend response shapes
-    return adaptPaginatedUserResponse(response.data);
+    // Backend returns array directly: [{id, fullname, username, email, phone_number}]
+    const users = adaptUserArray(response.data);
+    console.log("✅ [getUsers] Adapted users count:", users.length);
+    console.log("✅ [getUsers] Adapted users sample:", users.slice(0, 2));
+
+    const result: UserSearchResult = {
+      users,
+      hasMore: false, // No pagination in this API
+    };
+    console.log("✅ [getUsers] Returning result:", result);
+    return result;
   } catch (error: any) {
     const ne = normalizeError(error);
-    console.error("Failed to get users:", ne);
+    console.error("❌ [getUsers] Failed to get users:", ne);
     throw {
       message: ne.message || "Failed to load users",
-      code: ne.code || "FETCH_ERROR",
-      original: ne.original ?? ne,
-    };
-  }
-}
-
-/**
- * Get a specific user by ID.
- */
-export async function getUserById(userId: number): Promise<User | null> {
-  try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get(`/users/${userId}`);
-    // Use adapter to handle different backend response shapes
-    return adaptUserArray([response.data])[0] ?? null;
-  } catch (error: any) {
-    if (error.status === 404) {
-      return null;
-    }
-    const ne = normalizeError(error);
-    console.error("Failed to get user:", ne);
-    throw {
-      message: ne.message || "Failed to load user",
       code: ne.code || "FETCH_ERROR",
       original: ne.original ?? ne,
     };
@@ -137,5 +95,19 @@ export async function getUserByUsername(
       code: ne.code || "FETCH_ERROR",
       original: ne.original ?? ne,
     };
+  }
+}
+
+/**
+ * Get a specific user by ID.
+ * Fetches all users and finds the one with matching ID (simple cache-free approach).
+ */
+export async function getUserById(userId: number): Promise<User | null> {
+  try {
+    const result = await getUsers();
+    return result.users.find((u) => u.id === userId) ?? null;
+  } catch (error: any) {
+    console.error("Failed to get user by ID:", error);
+    return null;
   }
 }

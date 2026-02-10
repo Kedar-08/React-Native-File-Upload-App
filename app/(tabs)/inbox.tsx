@@ -10,7 +10,7 @@ import {
   getFriendlyFileLabel,
   getSharedWithMe,
   isLoggedIn,
-  type SharedFile,
+  type FileMetadata,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -26,7 +26,7 @@ import {
 } from "react-native";
 
 export default function InboxScreen() {
-  const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState({
@@ -70,14 +70,43 @@ export default function InboxScreen() {
   async function loadSharedFiles() {
     try {
       const files = await getSharedWithMe();
-      // Sort by sharedAt descending (newest first)
+      console.log(
+        "📥 [loadSharedFiles] Raw files from backend:",
+        JSON.stringify(files, null, 2),
+      );
+
+      // Check for duplicate IDs
+      const ids = files.map((f) => f.id);
+      const uniqueIds = new Set(ids);
+      if (ids.length !== uniqueIds.size) {
+        console.warn("⚠️ [loadSharedFiles] Duplicate file IDs detected:", ids);
+      }
+
+      // Sort by timestamp descending (newest first)
       const sorted = files.sort(
         (a, b) =>
-          new Date(b.sharedAt).getTime() - new Date(a.sharedAt).getTime(),
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       );
       setSharedFiles(sorted);
     } catch (error: any) {
       console.error("Failed to load shared files:", error);
+
+      // If 401 Unauthorized, token may have expired
+      if (error.status === 401) {
+        console.warn(
+          "🚫 Unauthorized - token may have expired, redirecting to login",
+        );
+        setToast({
+          visible: true,
+          message: "Session expired. Please log in again.",
+          type: "error",
+        });
+        setTimeout(() => {
+          router.replace("/");
+        }, 2000);
+        return;
+      }
+
       setToast({
         visible: true,
         message: error.message || "Failed to load inbox",
@@ -115,7 +144,7 @@ export default function InboxScreen() {
     selectedFilter === "all"
       ? sharedFiles
       : sharedFiles.filter(
-          (s) => getFileType(s.file.fileName ?? "") === selectedFilter,
+          (s) => getFileType(s.fileName ?? "") === selectedFilter,
         );
 
   async function handleRefresh() {
@@ -124,44 +153,55 @@ export default function InboxScreen() {
     setRefreshing(false);
   }
 
-  async function handleOpenFile(share: SharedFile) {
-    // Navigate to shared file viewer
-    router.push({
-      pathname: "/shared-file-viewer",
-      params: {
-        shareId: share.id.toString(),
-        shareData: JSON.stringify(share),
-      },
-    });
+  async function handleOpenFile(file: FileMetadata) {
+    // Navigate to file viewer to display details first
+    try {
+      console.log(
+        "📂 [handleOpenFile] Navigating to file viewer for:",
+        file.fileName,
+      );
+      router.push({
+        pathname: "/shared-file-viewer",
+        params: {
+          fileData: JSON.stringify(file),
+        },
+      });
+    } catch (error: any) {
+      console.error("Failed to navigate to file viewer:", error);
+      setToast({
+        visible: true,
+        message: error.message || "Failed to open file viewer",
+        type: "error",
+      });
+    }
   }
 
-  function renderSharedFileItem({ item }: { item: SharedFile }) {
+  function renderSharedFileItem({ item }: { item: FileMetadata }) {
     return (
       <TouchableOpacity
-        style={[styles.fileItem, !item.isRead && styles.unreadItem]}
+        style={styles.fileItem}
         onPress={() => handleOpenFile(item)}
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
           <Ionicons
-            name={getFileIcon(item.file.fileType, "outline")}
+            name={getFileIcon(item.fileType, "outline")}
             size={28}
             color={Colors.primary}
           />
-          {!item.isRead && <View style={styles.unreadDot} />}
         </View>
 
         <View style={styles.infoContainer}>
           <Text style={styles.fileName} numberOfLines={1}>
-            {item.file.fileName}
+            {item.fileName}
           </Text>
           <Text style={styles.fileType}>
-            {getFriendlyFileLabel(item.file.fileType, item.file.fileName)}
+            {getFriendlyFileLabel(item.fileType, item.fileName)}
           </Text>
-          <Text style={styles.senderInfo}>
-            From: {item.fromFullName || item.fromUsername}
+          <Text style={styles.senderInfo}>From: {item.uploadedByUsername}</Text>
+          <Text style={styles.timestamp}>
+            {formatTimestamp(item.timestamp)}
           </Text>
-          <Text style={styles.timestamp}>{formatTimestamp(item.sharedAt)}</Text>
         </View>
 
         <Ionicons
@@ -215,7 +255,7 @@ export default function InboxScreen() {
       ) : (
         <FlatList
           data={filteredSharedFiles}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
           renderItem={renderSharedFileItem}
           refreshControl={
             <RefreshControl

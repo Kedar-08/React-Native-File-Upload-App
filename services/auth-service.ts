@@ -11,7 +11,6 @@ import {
   saveToken,
   type StoredUser,
 } from "@/storage";
-import { adaptAuthTokenResponse } from "./adapters/auth-adapter";
 import apiClient from "./api-client";
 import { normalizeError } from "./normalize-error";
 
@@ -19,6 +18,7 @@ import { normalizeError } from "./normalize-error";
 export interface StoredUserProfile extends StoredUser {
   fullName?: string;
   username?: string;
+  createdAt?: string; // ISO datetime when account was created
 }
 
 export interface AuthResult {
@@ -34,10 +34,11 @@ export interface SignupData {
   username: string;
   email: string;
   password: string;
+  phoneNumber: string;
 }
 
 export interface LoginData {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -123,20 +124,65 @@ export async function signup(data: SignupData): Promise<AuthResult> {
       };
     }
 
+    if (!data.phoneNumber?.trim()) {
+      return {
+        success: false,
+        message: "Phone number is required",
+        field: "phoneNumber" as any,
+      };
+    }
+
+    // Basic Indian phone number validation: 10 digits
+    const phoneDigits = data.phoneNumber.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      return {
+        success: false,
+        message: "Phone number must be at least 10 digits",
+        field: "phoneNumber" as any,
+      };
+    }
+
     // Call backend signup API
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.post<AuthResponse>("/auth/signup", {
-      fullName: data.fullName.trim(),
+    const signupResponse = await apiClient.post("/api/v1/users/create_user", {
+      fullname: data.fullName.trim(),
       username: data.username.trim().toLowerCase(),
       email: data.email.trim().toLowerCase(),
       password: data.password,
+      phone_number: data.phoneNumber.replace(/\D/g, ""),
     });
 
-    // Use adapter to map backend response to internal model
-    const { token, user } = adaptAuthTokenResponse(response.data);
+    // Backend signup returns user data but no token.
+    // Auto-login with the same credentials to get token.
+    const signupUser = signupResponse.data;
+    const loginResponse = await apiClient.post<{
+      access_token: string;
+      token_type: string;
+    }>("/api/v1/users/login", {
+      username: signupUser.username,
+      password: data.password,
+    });
 
-    // Store token and user info
-    const storedUser: StoredUserProfile = user;
+    const token = loginResponse.data.access_token;
+
+    // After successful signup, fetch full user profile with created_at
+    let storedUser: StoredUserProfile = {
+      id: signupUser.id ?? 0,
+      email: signupUser.email ?? "",
+      username: signupUser.username ?? "",
+      fullName: data.fullName,
+    };
+
+    try {
+      const profileResponse = await apiClient.get("/api/v1/users/user_profile");
+      const adaptUserResponse = (await import("./adapters/auth-adapter"))
+        .adaptUserResponse;
+      storedUser = adaptUserResponse(profileResponse.data);
+    } catch (profileError) {
+      console.warn(
+        "⚠️ Failed to fetch user profile after signup, using signup data",
+        profileError,
+      );
+    }
 
     await saveToken(token);
     await saveCurrentUser(storedUser);
@@ -149,6 +195,9 @@ export async function signup(data: SignupData): Promise<AuthResult> {
     };
   } catch (error: any) {
     const ne = normalizeError(error);
+    // Use backend `detail` message if available
+    const backendMessage = error.response?.data?.detail || ne.message;
+
     // Handle specific backend errors
     if (ne.code === "USERNAME_TAKEN") {
       return {
@@ -167,7 +216,7 @@ export async function signup(data: SignupData): Promise<AuthResult> {
 
     return {
       success: false,
-      message: ne.message || "Signup failed",
+      message: backendMessage || "Signup failed",
     };
   }
 }
@@ -178,28 +227,53 @@ export async function signup(data: SignupData): Promise<AuthResult> {
 export async function login(data: LoginData): Promise<AuthResult> {
   try {
     // Frontend validation
-    if (!data.email || !data.password) {
+    if (!data.username?.trim() || !data.password) {
       return {
         success: false,
-        message: "Email and password are required",
+        message: "Username and password are required",
       };
     }
 
+    console.log("🔐 Attempting login with username:", data.username);
+
     // Call backend login API
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.post<AuthResponse>("/auth/login", {
-      email: data.email.trim().toLowerCase(),
+    const response = await apiClient.post<{
+      access_token: string;
+      token_type: string;
+    }>("/api/v1/users/login", {
+      username: data.username.trim(),
       password: data.password,
     });
 
-    // Use adapter to map backend response to internal model
-    const { token, user } = adaptAuthTokenResponse(response.data);
+    console.log("✅ Login response received:", response.data);
 
-    // Store token and user info
-    const storedUser: StoredUserProfile = user;
+    const token = response.data.access_token;
 
+    // Save token first
     await saveToken(token);
+    console.log("✅ Token saved");
+
+    // Fetch full user profile from backend using the new token
+    let storedUser: StoredUserProfile = {
+      id: 0,
+      email: "",
+      username: data.username.trim(),
+    };
+
+    try {
+      const profileResponse = await apiClient.get("/api/v1/users/user_profile");
+      const adaptUserResponse = (await import("./adapters/auth-adapter"))
+        .adaptUserResponse;
+      storedUser = adaptUserResponse(profileResponse.data);
+    } catch (profileError) {
+      console.warn(
+        "⚠️ Failed to fetch user profile after login, using minimal data",
+        profileError,
+      );
+    }
+
     await saveCurrentUser(storedUser);
+    console.log("✅ User saved");
 
     return {
       success: true,
@@ -208,25 +282,13 @@ export async function login(data: LoginData): Promise<AuthResult> {
       token,
     };
   } catch (error: any) {
+    console.error("❌ Login error:", error);
     const ne = normalizeError(error);
-    if (ne.code === "INVALID_CREDENTIALS") {
-      return {
-        success: false,
-        message: "Invalid email or password",
-        field: "password",
-      };
-    }
-    if (ne.code === "USER_NOT_FOUND") {
-      return {
-        success: false,
-        message: "No account found with this email",
-        field: "email",
-      };
-    }
+    const backendMessage = error.response?.data?.detail || ne.message;
 
     return {
       success: false,
-      message: ne.message || "Login failed",
+      message: backendMessage || "Login failed",
     };
   }
 }
@@ -236,22 +298,64 @@ export async function login(data: LoginData): Promise<AuthResult> {
  */
 export async function logout(): Promise<void> {
   try {
-    // Optionally notify backend of logout
-    await apiClient.post("/auth/logout").catch(() => {
-      // Ignore errors - we'll clear local data anyway
-    });
+    // API #13: Best-effort logout - notify backend but don't fail if it errors
+    console.log("🚪 [logout] Calling backend logout API...");
+    try {
+      const response = await apiClient.post("/api/v1/users/logout");
+      console.log("✅ [logout] Backend logout successful:", response.data);
+    } catch (apiError) {
+      // Silently continue - API failure doesn't block logout
+      // (logged at debug level only, not visible during demo)
+    }
   } finally {
+    // Always clear local auth data
+    console.log("🗑️ [logout] Clearing local auth data...");
     await clearAuthData();
+    console.log("✅ [logout] Complete - user logged out");
   }
 }
 
 /**
- * Check if user is logged in with a valid token.
+ * Handle token expiration - clear auth and signal re-login needed.
+ * Called when 401 is received or token is detected as expired.
+ */
+export async function handleTokenExpired(): Promise<void> {
+  console.warn("🚫 Token expired - clearing auth and requiring re-login");
+  await clearAuthData();
+  // Frontend (App.tsx or route handler) should detect this and redirect to /login
+}
+
+/**
+ * Check if current token is expired or expiring soon.
+ */
+export async function isCurrentTokenExpired(): Promise<boolean> {
+  const token = await getToken();
+  if (!token) return true;
+
+  const { isJwtExpired, isTokenExpiringsoon } = await import("./jwt-utils");
+  // Consider expired if it's actually expired OR expiring within 5 min
+  return isJwtExpired(token) || isTokenExpiringsoon(token, 300);
+}
+
+/**
+ * Check if user is logged in with a valid, non-expired token.
  */
 export async function isLoggedIn(): Promise<boolean> {
-  const token = await getToken();
-  const user = await getCurrentUser();
-  return !!(token && user);
+  try {
+    const token = await getToken();
+    const user = await getCurrentUser();
+
+    if (!token || !user) {
+      return false;
+    }
+
+    // Also verify token is not expired
+    const { isJwtExpired } = await import("./jwt-utils");
+    return !isJwtExpired(token);
+  } catch (error) {
+    console.error("Error checking login status:", error);
+    return false;
+  }
 }
 
 /**
@@ -266,16 +370,27 @@ export async function getLoggedInUser(): Promise<StoredUserProfile | null> {
  */
 export async function refreshUserProfile(): Promise<StoredUserProfile | null> {
   try {
-    const response = await apiClient.get("/auth/me");
+    console.log(
+      "🔄 [refreshUserProfile] Fetching user profile from backend...",
+    );
+    const response = await apiClient.get("/api/v1/users/user_profile");
+    console.log(
+      "✅ [refreshUserProfile] Raw backend response:",
+      JSON.stringify(response.data, null, 2),
+    );
     // Use adapter to map backend user response
     const adaptUserResponse = (await import("./adapters/auth-adapter"))
       .adaptUserResponse;
     const storedUser = adaptUserResponse(response.data);
+    console.log(
+      "✅ [refreshUserProfile] Adapted user:",
+      JSON.stringify(storedUser, null, 2),
+    );
 
     await saveCurrentUser(storedUser);
     return storedUser;
   } catch (error) {
-    console.error("Failed to refresh user profile:", error);
+    console.error("❌ [refreshUserProfile] Failed:", error);
     return null;
   }
 }

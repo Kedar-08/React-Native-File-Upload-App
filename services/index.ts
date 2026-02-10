@@ -10,6 +10,8 @@ export type { ApiResponse, PaginatedResponse } from "./api-client";
 // Auth Service
 export {
   getLoggedInUser,
+  handleTokenExpired,
+  isCurrentTokenExpired,
   isLoggedIn,
   login,
   logout,
@@ -21,25 +23,34 @@ export {
   type StoredUserProfile,
 } from "./auth-service";
 
+// JWT Utilities
+export {
+  decodeJwt,
+  getTokenExpiryDate,
+  getTokenExpiryIn,
+  isJwtExpired,
+  isTokenExpiringsoon,
+  type JwtPayload,
+} from "./jwt-utils";
+
 // User Service
 export {
   getUserById,
   getUserByUsername,
   getUsers,
-  searchUsers,
   type User,
   type UserSearchResult,
 } from "./user-service";
 
 // File Service
 export {
-  checkDuplicateFile,
   deleteFile,
   downloadAndOpenFile,
   formatFileSize,
   formatTimestamp,
-  getFileById,
+  getFileDetailsById,
   getMyFiles,
+  openMyFile,
   pickFile,
   uploadFile,
   uploadMultipleFiles,
@@ -50,11 +61,7 @@ export {
 
 // Share Service
 export {
-  getSharedByMe,
   getSharedWithMe,
-  getUnreadShareCount,
-  markShareAsRead,
-  removeFromInbox,
   shareFile,
   type SharedFile,
   type ShareFileRequest,

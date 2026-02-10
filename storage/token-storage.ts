@@ -26,20 +26,28 @@ export async function saveToken(
 // Get stored auth token (returns null if expired)
 export async function getToken(): Promise<string | null> {
   const tokenDataJson = await SecureStore.getItemAsync(TOKEN_KEY);
-  if (!tokenDataJson) return null;
+  if (!tokenDataJson) {
+    console.log("📝 No token found in secure store");
+    return null;
+  }
 
   try {
     const tokenData: TokenData = JSON.parse(tokenDataJson);
 
     // Check if token is expired
     if (Date.now() > tokenData.expiresAt) {
+      console.warn("⏰ Token expired at:", new Date(tokenData.expiresAt));
       await deleteToken(); // Clean up expired token
       return null;
     }
 
+    const expiresIn = tokenData.expiresAt - Date.now();
+    const hoursRemaining = Math.floor(expiresIn / (1000 * 60 * 60));
+    console.log("✅ Token found, expires in", hoursRemaining, "hours");
     return tokenData.token;
   } catch {
     // If parsing fails, it might be an old format token, return it but consider migrating
+    console.warn("📝 Old format token found, returning as-is");
     return tokenDataJson;
   }
 }

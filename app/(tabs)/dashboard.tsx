@@ -4,7 +4,8 @@
 
 import { FileItem, LoadingSpinner, Toast } from "@/components/ui";
 import { Colors } from "@/constants/theme";
-import { getMyFiles, isLoggedIn, type FileMetadata } from "@/services";
+import { getMyFiles, isLoggedIn } from "@/services";
+import type { FileMetadata } from "@/services/file-service";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -142,6 +143,24 @@ export default function DashboardScreen() {
       setFiles(sorted);
     } catch (error: any) {
       console.error("Failed to load files:", error);
+
+      // If 401 Unauthorized, token may have expired - redirect to login
+      if (error.status === 401) {
+        console.warn(
+          "🚫 Unauthorized - token may have expired, redirecting to login",
+        );
+        setToast({
+          visible: true,
+          message: "Session expired. Please log in again.",
+          type: "error",
+        });
+        // Give user 2 seconds to see the message, then redirect
+        setTimeout(() => {
+          router.replace("/");
+        }, 2000);
+        return;
+      }
+
       setToast({
         visible: true,
         message: error.message || "Failed to load files",
@@ -177,63 +196,62 @@ export default function DashboardScreen() {
   }
 
   return (
-    <>
-      <View style={styles.container}>
-        <Toast
-          visible={toast.visible}
-          message={toast.message}
-          type={toast.type}
-          onDismiss={() => setToast({ ...toast, visible: false })}
-        />
+    <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast({ ...toast, visible: false })}
+      />
 
-        {/* Files List */}
-        <View style={styles.listContainer}>
-          <View style={styles.header}>
-            <Text style={styles.sectionTitle}>
-              Uploaded Files ({filteredFiles.length})
-            </Text>
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setShowFilterModal(true)}
-            >
-              <Ionicons name="filter" size={20} color={Colors.primary} />
-              <Text style={styles.filterButtonText}>Filter</Text>
-            </TouchableOpacity>
-          </View>
-
-          {filteredFiles.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons
-                name="cloud-upload-outline"
-                size={64}
-                color={Colors.iconMuted}
-              />
-              <Text style={styles.emptyText}>No files uploaded yet</Text>
-              <Text style={styles.emptySubtext}>
-                Tap the Upload tab (+) to upload your first file
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={filteredFiles}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <FileItem file={item} onPress={handleFilePress} />
-              )}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={Colors.primary}
-                />
-              }
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
+      {/* Files List */}
+      <View style={styles.listContainer}>
+        <View style={styles.header}>
+          <Text style={styles.sectionTitle}>
+            Uploaded Files ({filteredFiles.length})
+          </Text>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilterModal(true)}
+          >
+            <Ionicons name="filter" size={20} color={Colors.primary} />
+            <Text style={styles.filterButtonText}>Filter</Text>
+          </TouchableOpacity>
         </View>
+
+        {filteredFiles.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons
+              name="cloud-upload-outline"
+              size={64}
+              color={Colors.iconMuted}
+            />
+            <Text style={styles.emptyText}>No files uploaded yet</Text>
+            <Text style={styles.emptySubtext}>
+              Tap the Upload tab (+) to upload your first file
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredFiles}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item }) => (
+              <FileItem file={item} onPress={handleFilePress} />
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={Colors.primary}
+              />
+            }
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
 
+      {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
         transparent={true}
@@ -273,7 +291,7 @@ export default function DashboardScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </>
+    </View>
   );
 }
 

@@ -9,12 +9,12 @@ import axios, {
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from "axios";
-import { installMockApiInterceptor } from "./mock-api";
 import { normalizeError } from "./normalize-error";
 
-// Base URL for the backend API
-// TODO: Replace with actual backend URL when available
-const API_BASE_URL = "https://api.example.com/v1";
+// Base URL for the backend API (development physical device)
+// Do not hardcode URLs elsewhere; update only here.
+// Use ngrok tunnel for tablet to reach backend via HTTPS forwarding
+const API_BASE_URL = "https://nonheroic-lumpingly-winfred.ngrok-free.dev";
 
 // Create axios instance with base configuration
 const apiClient: AxiosInstance = axios.create({
@@ -30,8 +30,16 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const token = await getToken();
-    if (token && config.headers) {
+    console.log("🔐 Request interceptor:", {
+      url: config.url,
+      hasToken: !!token,
+      tokenLength: token?.length || 0,
+    });
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log("✅ Token attached to request");
+    } else {
+      console.warn("⚠️ No token available for request:", config.url);
     }
     return config;
   },
@@ -44,17 +52,23 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    // Handle 401 Unauthorized - clear auth and redirect to login
+    console.error("❌ API Error:", {
+      status: error.response?.status,
+      url: error.response?.config?.url,
+      data: error.response?.data,
+    });
+
+    // Handle 401 Unauthorized - token may be invalid or expired
     if (error.response?.status === 401) {
+      console.warn("🚫 Unauthorized (401) - clearing auth data");
       await clearAuthData();
-      // Note: Navigation should be handled by the calling code
+      // IMPORTANT: Frontend components should detect 401 errors and redirect to login.
+      // Example: if (error.status === 401) { router.replace("/login"); }
+      // This gives us flexibility to show session expired messages before redirecting.
     }
     return Promise.reject(normalizeError(error));
   },
 );
-
-// Install mock API interceptor for development (comment out when backend is ready)
-installMockApiInterceptor(apiClient);
 
 // Export configured instance
 export default apiClient;

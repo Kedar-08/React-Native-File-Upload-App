@@ -4,130 +4,15 @@
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import {
-  checkDuplicateFile,
-  getLoggedInUser,
-  getUnreadShareCount,
-  uploadMultipleFiles,
-} from "@/services";
+import { getLoggedInUser, uploadMultipleFiles } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { Tabs, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Tabs, useRouter } from "expo-router";
+import { useCallback } from "react";
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
-  const [duplicateFile, setDuplicateFile] = useState<string | null>(null);
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [pendingAssets, setPendingAssets] = useState<
-    DocumentPicker.DocumentPickerAsset[]
-  >([]);
-  const [approvedAssets, setApprovedAssets] = useState<
-    DocumentPicker.DocumentPickerAsset[]
-  >([]);
-  const [currentAssetIndex, setCurrentAssetIndex] = useState(0);
-  const [userId, setUserId] = useState<number | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  // Load unread count when tabs come into focus
-  useFocusEffect(
-    useCallback(() => {
-      loadUnreadCount();
-    }, []),
-  );
-
-  async function loadUnreadCount() {
-    try {
-      const count = await getUnreadShareCount();
-      setUnreadCount(count);
-    } catch (error) {
-      console.error("Failed to load unread count:", error);
-    }
-  }
-
-  // Check each asset for duplicates and collect approved ones
-  const processDuplicateCheck = useCallback(
-    async (
-      assets: DocumentPicker.DocumentPickerAsset[],
-      userIdParam: number,
-    ) => {
-      setUserId(userIdParam);
-      setPendingAssets(assets);
-      setApprovedAssets([]);
-      setCurrentAssetIndex(0);
-
-      // Check first file
-      if (assets.length > 0) {
-        const firstAsset = assets[0];
-        const existing = await checkDuplicateFile(firstAsset.name, userIdParam);
-        if (existing) {
-          setDuplicateFile(firstAsset.name);
-          setShowDuplicateModal(true);
-        } else {
-          // Not a duplicate, add to approved and move to next
-          handleUploadAgain();
-        }
-      }
-    },
-    [],
-  );
-
-  const handleUploadAgain = useCallback(async () => {
-    setShowDuplicateModal(false);
-
-    const nextIndex = currentAssetIndex + 1;
-    const newApproved = [...approvedAssets, pendingAssets[currentAssetIndex]];
-    setApprovedAssets(newApproved);
-
-    // Check next file
-    if (nextIndex < pendingAssets.length) {
-      const nextAsset = pendingAssets[nextIndex];
-      const existing = await checkDuplicateFile(nextAsset.name, userId!);
-      setCurrentAssetIndex(nextIndex);
-
-      if (existing) {
-        setDuplicateFile(nextAsset.name);
-        setShowDuplicateModal(true);
-      } else {
-        // Recursive call for non-duplicates
-        setCurrentAssetIndex(nextIndex);
-        handleUploadAgain();
-      }
-    } else {
-      // All files processed, now upload the approved ones
-      if (newApproved.length > 0 && userId) {
-        await performUpload(newApproved, userId);
-      }
-    }
-  }, [currentAssetIndex, pendingAssets, approvedAssets, userId]);
-
-  const handleSkip = useCallback(async () => {
-    setShowDuplicateModal(false);
-
-    const nextIndex = currentAssetIndex + 1;
-
-    // Check next file
-    if (nextIndex < pendingAssets.length) {
-      const nextAsset = pendingAssets[nextIndex];
-      const existing = await checkDuplicateFile(nextAsset.name, userId!);
-      setCurrentAssetIndex(nextIndex);
-
-      if (existing) {
-        setDuplicateFile(nextAsset.name);
-        setShowDuplicateModal(true);
-      } else {
-        // Move to next non-duplicate
-        handleSkip();
-      }
-    } else {
-      // All files processed, now upload the approved ones
-      if (approvedAssets.length > 0 && userId) {
-        await performUpload(approvedAssets, userId);
-      }
-    }
-  }, [currentAssetIndex, pendingAssets, approvedAssets, userId]);
 
   const performUpload = useCallback(
     async (
@@ -197,13 +82,18 @@ export default function TabsLayout() {
         return;
       }
 
-      // Ensure user.id is a number
+      // Ensure user.id is a number and not null
       const userIdNum =
         typeof user.id === "string" ? parseInt(user.id, 10) : user.id;
-      console.log("Checking duplicates for user:", userIdNum);
 
-      // Start duplicate check process
-      await processDuplicateCheck(result.assets, userIdNum);
+      if (userIdNum === null || userIdNum === undefined) {
+        console.error("Invalid user id:", userIdNum);
+        router.push("/");
+        return;
+      }
+
+      // Directly upload files without duplicate validation
+      await performUpload(result.assets, userIdNum);
     } catch (error) {
       console.error("Error uploading files:", error);
     }
@@ -292,14 +182,6 @@ export default function TabsLayout() {
               <Ionicons name="mail" size={size} color={color} />
             ),
             headerTitle: "Inbox",
-            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
-            tabBarBadgeStyle: {
-              backgroundColor: Colors.error,
-              fontSize: 10,
-              minWidth: 18,
-              height: 18,
-              borderRadius: 9,
-            },
           }}
         />
 
@@ -316,98 +198,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-
-      {/* Duplicate File Confirmation Modal */}
-      <Modal
-        visible={showDuplicateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDuplicateModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Duplicate File</Text>
-            <Text style={styles.modalMessage}>
-              File &quot;{duplicateFile}&quot; already exists. Do you want to
-              upload it again?
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={handleSkip}
-              >
-                <Text style={styles.cancelButtonText}>Skip</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.uploadButton]}
-                onPress={handleUploadAgain}
-              >
-                <Text style={styles.uploadButtonText}>Upload Again</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: Colors.backgroundWhite,
-    borderRadius: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    marginHorizontal: 32,
-    maxWidth: 320,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 24,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelButton: {
-    backgroundColor: Colors.backgroundAccent,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.primary,
-  },
-  uploadButton: {
-    backgroundColor: Colors.primary,
-  },
-  uploadButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.textWhite,
-  },
-});

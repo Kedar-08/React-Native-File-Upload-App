@@ -11,14 +11,14 @@ import {
 import { Colors } from "@/constants/theme";
 import {
   deleteFile,
-  downloadAndOpenFile,
   formatFileSize,
   formatTimestamp,
-  getFileById,
+  getFileDetailsById,
   getFileIcon,
   getFriendlyFileLabel,
   getLoggedInUser,
-  searchUsers,
+  getUsers,
+  openMyFile,
   shareFile,
   type FileMetadata,
   type User,
@@ -80,14 +80,38 @@ export default function FileViewerScreen() {
     }
 
     try {
-      const fileData = await getFileById(parseInt(fileId));
+      let fileData: FileMetadata | null = null;
+
+      // All files now use UUID format
+      if (typeof fileId === "string") {
+        fileData = await getFileDetailsById(fileId);
+      }
+
       if (!fileData) {
+        console.warn("File not found with ID:", fileId);
         router.back();
         return;
       }
       setFile(fileData);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load file:", error);
+
+      // If 401 Unauthorized, token may have expired - redirect to login
+      if (error.status === 401) {
+        console.warn(
+          "🚫 Unauthorized - token may have expired, redirecting to login",
+        );
+        setToast({
+          visible: true,
+          message: "Session expired. Please log in again.",
+          type: "error",
+        });
+        setTimeout(() => {
+          router.replace("/");
+        }, 2000);
+        return;
+      }
+
       router.back();
     } finally {
       setLoading(false);
@@ -99,7 +123,7 @@ export default function FileViewerScreen() {
 
     setOpening(true);
     try {
-      await downloadAndOpenFile(file);
+      await openMyFile(file);
     } catch (error: any) {
       console.error("Failed to open file:", error);
       setToast({
@@ -125,7 +149,27 @@ export default function FileViewerScreen() {
       await deleteFile(file.id);
       router.back();
     } catch (error: any) {
-      console.error("Failed to delete file:", error);
+      // Detect 404 Not Found coming from backend (delete API not implemented)
+      const status =
+        error?.status ||
+        error?.original?.status ||
+        error?.original?.response?.status ||
+        error?.code?.includes("404")
+          ? 404
+          : null;
+
+      if (status === 404 || error?.message?.includes("404")) {
+        console.log("🚫 [confirmDelete] Delete API not yet implemented (404)");
+        setToast({
+          visible: true,
+          message: "Delete not available — backend API not yet implemented",
+          type: "error",
+        });
+        setDeleting(false);
+        return;
+      }
+
+      console.error("❌ [confirmDelete] Failed to delete file:", error);
       setToast({
         visible: true,
         message: error.message || "Failed to delete file",
@@ -147,19 +191,54 @@ export default function FileViewerScreen() {
     setSelectedUser(null);
 
     if (query.trim().length < 2) {
+      console.log("🔍 Query too short:", query.length, "chars");
       setSearchResults([]);
       return;
     }
 
     setSearching(true);
     try {
-      const result = await searchUsers(query);
-      // Safely get users array and filter out current user
-      const users = (result && (result.users ?? (result as any).users)) || [];
-      const filtered = (users || []).filter((u) => u.id !== currentUserId);
+      console.log("🔍 [handleSearch] Searching for users:", query);
+      console.log("🔍 [handleSearch] currentUserId:", currentUserId);
+
+      // Load all users and filter client-side
+      const result = await getUsers();
+      console.log("🔍 [handleSearch] getUsers() returned:", result);
+
+      const allUsers = result.users || [];
+      console.log("🔍 [handleSearch] allUsers count:", allUsers.length);
+      console.log("🔍 [handleSearch] allUsers sample:", allUsers.slice(0, 3));
+
+      // Filter by matching username or fullName, exclude current user
+      const queryLower = query.trim().toLowerCase();
+      const filtered = allUsers.filter((u) => {
+        const isNotCurrent = u.id !== currentUserId;
+        const usernameMatch = u.username?.toLowerCase().includes(queryLower);
+        const fullNameMatch = u.fullName?.toLowerCase().includes(queryLower);
+        const match = isNotCurrent && (usernameMatch || fullNameMatch);
+        if (match) {
+          console.log(
+            "  ✓ Match:",
+            u.username,
+            "- username:",
+            usernameMatch,
+            "fullName:",
+            fullNameMatch,
+          );
+        }
+        return match;
+      });
+
+      console.log("✅ [handleSearch] Filtered count:", filtered.length);
+      console.log("✅ [handleSearch] Setting search results:", filtered);
       setSearchResults(filtered);
     } catch (error) {
-      console.error("Search failed:", error);
+      console.error("❌ [handleSearch] Search failed:", error);
+      setToast({
+        visible: true,
+        message: "Failed to load users",
+        type: "error",
+      });
     } finally {
       setSearching(false);
     }
@@ -172,14 +251,13 @@ export default function FileViewerScreen() {
   }
 
   async function handleShareFile() {
-    if (!file || !selectedUser || !currentUserId) return;
+    if (!file || !selectedUser) return;
 
     setSharing(true);
     try {
       const result = await shareFile({
         fileId: file.id,
-        fromUserId: currentUserId,
-        toUserId: selectedUser.id,
+        receiverId: selectedUser.id,
       });
 
       if (result.success) {
@@ -405,6 +483,8 @@ export default function FileViewerScreen() {
                     keyExtractor={(item) =>
                       item.username ?? item.email ?? item.id.toString()
                     }
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
                     renderItem={({ item }) => (
                       <TouchableOpacity
                         style={styles.userItem}
@@ -431,7 +511,6 @@ export default function FileViewerScreen() {
                       </TouchableOpacity>
                     )}
                     style={styles.resultsList}
-                    nestedScrollEnabled
                   />
                 </View>
               )}
@@ -624,14 +703,20 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
+    paddingTop: 60,
   },
   modalContent: {
     backgroundColor: Colors.backgroundWhite,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 24,
-    maxHeight: "80%",
+    borderRadius: 24,
+    marginHorizontal: 16,
+    paddingBottom: 0,
+    maxHeight: "85%",
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
   },
   modalHeader: {
     flexDirection: "row",
@@ -649,7 +734,9 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingVertical: 12,
+    maxHeight: "70%",
+    flexGrow: 1,
   },
   modalLabel: {
     fontSize: 14,
@@ -687,7 +774,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
   },
   resultsList: {
-    maxHeight: 200,
+    maxHeight: 400,
   },
   userItem: {
     flexDirection: "row",
@@ -766,7 +853,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },

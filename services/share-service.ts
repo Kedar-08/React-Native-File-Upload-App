@@ -3,7 +3,6 @@
  * Handles sharing files between users.
  */
 
-import { adaptShareArray } from "./adapters/share-adapter";
 import apiClient from "./api-client";
 import { type FileMetadata } from "./file-service";
 import { normalizeError } from "./normalize-error";
@@ -28,66 +27,75 @@ export interface SharedFile {
 
 /**
  * Share file request.
- * NOTE: ID fields (fromUserId, toUserId) are INTERNAL ONLY and come from auth/lookup.
+ * Simple request structure - backend identifies current user from Bearer token.
  */
 export interface ShareFileRequest {
-  fileId: number;
-  fromUserId: number; // @internal - obtained from current auth session
-  toUserId: number; // @internal - obtained from user lookup by username
+  fileId: string | number; // UUID string (new) or numeric ID (legacy)
+  receiverId: number; // Recipient user ID
 }
 
 export interface ShareResult {
   success: boolean;
-  shareId?: number;
   message?: string;
   error?: string;
 }
 
 /**
  * Share a file with another user.
+ * API #11: Share file via POST /api/v1/files/share
  */
 export async function shareFile(
   request: ShareFileRequest,
 ): Promise<ShareResult> {
   try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.post<{ id: number; message: string }>(
-      "/shares",
+    console.log(
+      "📤 Sharing file:",
+      request.fileId,
+      "with user:",
+      request.receiverId,
+    );
+
+    // API #11: Share file — Backend identifies sender from Bearer token
+    // Use form-urlencoded body format
+    const formData = new URLSearchParams();
+    formData.append("file_id", String(request.fileId));
+    formData.append("receiver_id", String(request.receiverId));
+
+    const response = await apiClient.post<{ status: string }>(
+      "/api/v1/files/share",
+      formData,
       {
-        fileId: request.fileId,
-        fromUserId: request.fromUserId,
-        toUserId: request.toUserId,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       },
     );
 
+    console.log("✅ File shared successfully:", response.data.status);
     return {
       success: true,
-      shareId: response.data.id,
-      message: response.data.message || "File shared successfully",
+      message: response.data.status || "File shared successfully",
     };
   } catch (error: any) {
     const ne = normalizeError(error);
     console.error("Failed to share file:", ne);
 
-    // Handle specific errors
-    if (ne.code === "ALREADY_SHARED") {
+    // Handle validation errors
+    if (ne.status === 422) {
       return {
         success: false,
-        error: "File is already shared with this user",
+        error: "Invalid file ID or recipient user ID",
       };
     }
-    if (ne.code === "USER_NOT_FOUND") {
+
+    // Handle not found errors
+    if (ne.status === 404) {
       return {
         success: false,
-        error: "Recipient user not found",
+        error: "File or recipient not found",
       };
     }
-    if (ne.code === "FILE_NOT_FOUND") {
-      return {
-        success: false,
-        error: "File not found",
-      };
-    }
+
     return {
       success: false,
       error: ne.message || "Failed to share file",
@@ -97,95 +105,55 @@ export async function shareFile(
 
 /**
  * Get files shared with the current user (Inbox).
+ * API #10: Returns flat share records with file_name, file_type, sender_username, shared_time
+ * No extra API calls needed - all data is included in the response
  */
-export async function getSharedWithMe(): Promise<SharedFile[]> {
+export async function getSharedWithMe(): Promise<FileMetadata[]> {
   try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get("/shares/inbox");
-    // Use adapter to handle different backend response shapes
-    return adaptShareArray(response.data);
+    console.log("📥 [getSharedWithMe] Fetching shared files from inbox...");
+    // API #10: Get shared files — requires Bearer token
+    const response = await apiClient.get("/api/v1/files/inbox");
+    const shareRecords = response.data || [];
+    console.log(
+      "✅ [getSharedWithMe] Retrieved",
+      shareRecords.length,
+      "shared files",
+    );
+    console.log(
+      "📋 [getSharedWithMe] First record:",
+      JSON.stringify(shareRecords[0], null, 2),
+    );
+
+    // Map flat share records directly to FileMetadata
+    const files: FileMetadata[] = shareRecords.map((share: any) => ({
+      id: share.file_id,
+      fileName: share.file_name || "File",
+      fileType: share.file_type || "application/octet-stream",
+      fileSize: 0, // Not provided in this API endpoint
+      uploadedByUserId: Number(share.sender_id) || 0,
+      uploadedByUsername: share.sender_username || "Unknown",
+      timestamp: share.shared_time || new Date().toISOString(),
+    }));
+
+    console.log(
+      "✅ [getSharedWithMe] Processed",
+      files.length,
+      "files for display",
+    );
+    return files;
   } catch (error: any) {
     const ne = normalizeError(error);
-    console.error("Failed to fetch shared files:", ne);
+    console.error("❌ [getSharedWithMe] Failed:", ne);
+
+    // If 401 Unauthorized, token may have expired
+    if (ne.status === 401) {
+      console.warn("🚫 [getSharedWithMe] Unauthorized - token expired");
+    }
+
     throw {
       message: ne.message || "Failed to load shared files",
       code: ne.code || "FETCH_ERROR",
       original: ne.original ?? ne,
     };
-  }
-}
-
-/**
- * Get files shared by the current user.
- */
-export async function getSharedByMe(): Promise<SharedFile[]> {
-  // This function is currently unused in the UI. Commenting out implementation for now
-  // so we don't remove the API contract entirely. Keep the stub so callers won't break.
-  /*
-  try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get("/shares/sent");
-    // Use adapter to handle different backend response shapes
-    return adaptShareArray(response.data);
-  } catch (error: any) {
-    const ne = normalizeError(error);
-    console.error("Failed to fetch sent shares:", ne);
-    throw {
-      message: ne.message || "Failed to load sent shares",
-      code: ne.code || "FETCH_ERROR",
-      original: ne.original ?? ne,
-    };
-  }
-  */
-  // Return empty array as a safe fallback while the UI doesn't use this endpoint.
-  return [];
-}
-
-/**
- * Mark a shared file as read.
- */
-export async function markShareAsRead(shareId: number): Promise<void> {
-  try {
-    // TODO: Replace with actual endpoint when backend is ready
-    await apiClient.patch(`/shares/${shareId}/read`);
-  } catch (error: any) {
-    const ne = normalizeError(error);
-    console.error("Failed to mark share as read:", ne);
-    // Don't throw - this is not critical
-  }
-}
-
-/**
- * Remove a shared file from inbox (recipient side).
- */
-export async function removeFromInbox(shareId: number): Promise<void> {
-  try {
-    // TODO: Replace with actual endpoint when backend is ready
-    await apiClient.delete(`/shares/${shareId}`);
-  } catch (error: any) {
-    const ne = normalizeError(error);
-    console.error("Failed to remove shared file:", ne);
-    throw {
-      message: ne.message || "Failed to remove shared file",
-      code: ne.code || "DELETE_ERROR",
-      original: ne.original ?? ne,
-    };
-  }
-}
-
-/**
- * Get unread share count for badge display.
- */
-export async function getUnreadShareCount(): Promise<number> {
-  try {
-    // TODO: Replace with actual endpoint when backend is ready
-    const response = await apiClient.get<{ count: number }>(
-      "/shares/unread-count",
-    );
-    return response.data.count;
-  } catch (error: any) {
-    const ne = normalizeError(error);
-    console.error("Failed to get unread count:", ne);
-    return 0; // Return 0 on error
   }
 }

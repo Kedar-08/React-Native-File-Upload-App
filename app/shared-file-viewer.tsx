@@ -2,7 +2,7 @@
  * Shared File Viewer Screen - View shared file details, download, and remove from inbox.
  */
 
-import { ConfirmationModal, LoadingSpinner, Toast } from "@/components/ui";
+import { LoadingSpinner, Toast } from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import {
   downloadAndOpenFile,
@@ -10,10 +10,7 @@ import {
   formatTimestamp,
   getFileIcon,
   getFriendlyFileLabel,
-  getUserByUsername,
-  markShareAsRead,
-  removeFromInbox,
-  type SharedFile,
+  type FileMetadata,
 } from "@/services";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -29,14 +26,12 @@ import {
 
 export default function SharedFileViewerScreen() {
   const params = useLocalSearchParams<{
-    shareId: string;
-    shareData?: string;
+    fileData?: string;
   }>();
-  const [share, setShare] = useState<SharedFile | null>(null);
+  const [file, setFile] = useState<FileMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [senderName, setSenderName] = useState<string | null>(null);
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
 
   const [toast, setToast] = useState({
@@ -46,41 +41,23 @@ export default function SharedFileViewerScreen() {
   });
 
   useEffect(() => {
-    loadShare();
-  }, [params.shareId]);
+    loadFile();
+  }, [params.fileData]);
 
-  async function loadShare() {
+  async function loadFile() {
     try {
-      // Parse share data from params
-      if (params.shareData) {
-        const shareData = JSON.parse(params.shareData as string) as SharedFile;
-        setShare(shareData);
-
-        // Mark as read if not already
-        if (!shareData.isRead) {
-          try {
-            await markShareAsRead(shareData.id);
-          } catch (error) {
-            console.error("Failed to mark as read:", error);
-          }
-        }
-        // Attempt to load sender email if available; otherwise lookup by username
-        if ((shareData as any).fromEmail) {
-          setSenderEmail((shareData as any).fromEmail);
-        } else if (shareData.fromUsername) {
-          try {
-            const u = await getUserByUsername(shareData.fromUsername);
-            if (u?.email) setSenderEmail(u.email);
-          } catch (err) {
-            // Ignore lookup errors
-          }
-        }
+      // Parse file data from params
+      if (params.fileData) {
+        const fileData = JSON.parse(params.fileData as string) as FileMetadata;
+        setFile(fileData);
+        // Display sender's username
+        setSenderName(fileData.uploadedByUsername || null);
       } else {
         router.back();
         return;
       }
     } catch (error) {
-      console.error("Failed to load shared file:", error);
+      console.error("Failed to load file:", error);
       router.back();
     } finally {
       setLoading(false);
@@ -88,11 +65,12 @@ export default function SharedFileViewerScreen() {
   }
 
   async function handleDownload() {
-    if (!share) return;
+    if (!file) return;
 
     setDownloading(true);
     try {
-      await downloadAndOpenFile(share.file);
+      console.log("📥 [handleDownload] Downloading file:", file.fileName);
+      await downloadAndOpenFile(file);
       setToast({
         visible: true,
         message: "File opened successfully",
@@ -110,43 +88,14 @@ export default function SharedFileViewerScreen() {
     }
   }
 
-  function handleDelete() {
-    setShowDeleteModal(true);
-  }
-
-  async function confirmDelete() {
-    if (!share) return;
-
-    setShowDeleteModal(false);
-    setRemoving(true);
-    try {
-      await removeFromInbox(share.id);
-      setToast({
-        visible: true,
-        message: "Removed from inbox",
-        type: "success",
-      });
-      // Go back after removing
-      setTimeout(() => router.back(), 500);
-    } catch (error: any) {
-      console.error("Failed to remove file:", error);
-      setToast({
-        visible: true,
-        message: error.message || "Failed to remove file",
-        type: "error",
-      });
-      setRemoving(false);
-    }
-  }
-
   if (loading) {
-    return <LoadingSpinner message="Loading shared file..." />;
+    return <LoadingSpinner message="Loading file..." />;
   }
 
-  if (!share) {
+  if (!file) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Shared file not found</Text>
+        <Text style={styles.errorText}>File not found</Text>
       </View>
     );
   }
@@ -161,104 +110,67 @@ export default function SharedFileViewerScreen() {
           onDismiss={() => setToast({ ...toast, visible: false })}
         />
 
-        <ConfirmationModal
-          visible={showDeleteModal}
-          title="Remove from Inbox"
-          message={`Are you sure you want to remove "${share.file.fileName}" from your inbox? This action cannot be undone.`}
-          confirmText="Remove"
-          cancelText="Cancel"
-          type="danger"
-          onConfirm={confirmDelete}
-          onCancel={() => setShowDeleteModal(false)}
-        />
-
         <View style={styles.content}>
           {/* File Icon */}
           <View style={styles.iconContainer}>
             <Ionicons
-              name={getFileIcon(share.file.fileType)}
+              name={getFileIcon(file.fileType)}
               size={64}
               color={Colors.primary}
             />
           </View>
 
           {/* File Name */}
-          <Text style={styles.fileName}>{share.file.fileName}</Text>
+          <Text style={styles.fileName}>{file.fileName}</Text>
 
           {/* Shared Info Badge */}
-          <View style={styles.sharedInfoBadge}>
-            <Ionicons name="share-social" size={16} color={Colors.primary} />
-            <Text style={styles.sharedInfoText}>
-              Shared by {share.fromFullName || share.fromUsername}
-            </Text>
-          </View>
+          {senderName && (
+            <View style={styles.sharedInfoBadge}>
+              <Ionicons name="share-social" size={16} color={Colors.primary} />
+              <Text style={styles.sharedInfoText}>Shared by {senderName}</Text>
+            </View>
+          )}
 
           {/* File Details */}
           <View style={styles.detailsCard}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>File Type</Text>
               <Text style={styles.detailValue}>
-                {getFriendlyFileLabel(share.file.fileType, share.file.fileName)}
+                {getFriendlyFileLabel(file.fileType, file.fileName)}
               </Text>
             </View>
 
             <View style={styles.divider} />
 
-            {share.file.fileSize && (
+            {file.fileSize > 0 && (
               <>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Size</Text>
                   <Text style={styles.detailValue}>
-                    {formatFileSize(share.file.fileSize)}
+                    {formatFileSize(file.fileSize)}
                   </Text>
                 </View>
                 <View style={styles.divider} />
               </>
             )}
 
+            {senderName && (
+              <>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Shared By</Text>
+                  <Text style={styles.detailValue}>{senderName}</Text>
+                </View>
+                <View style={styles.divider} />
+              </>
+            )}
+
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Shared From</Text>
-              <Text style={styles.detailValue}>
-                {share.fromFullName || share.fromUsername}
+              <Text style={styles.detailLabel}>
+                {senderName === "You" ? "Uploaded" : "Shared"} Date
               </Text>
-              {senderEmail ? (
-                <Text style={styles.detailSubValue}>{senderEmail}</Text>
-              ) : null}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Shared Date</Text>
               <Text style={styles.detailValue}>
-                {formatTimestamp(share.sharedAt)}
+                {formatTimestamp(file.timestamp)}
               </Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <View style={styles.statusBadge}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: share.isRead
-                        ? Colors.success
-                        : Colors.warning,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.statusText,
-                    { color: share.isRead ? Colors.success : Colors.warning },
-                  ]}
-                >
-                  {share.isRead ? "Read" : "Unread"}
-                </Text>
-              </View>
             </View>
           </View>
 
@@ -267,7 +179,7 @@ export default function SharedFileViewerScreen() {
             <TouchableOpacity
               style={[styles.compactButton, styles.primaryButton]}
               onPress={handleDownload}
-              disabled={downloading || removing}
+              disabled={downloading}
               activeOpacity={0.7}
             >
               {downloading ? (
@@ -279,23 +191,7 @@ export default function SharedFileViewerScreen() {
                     size={20}
                     color={Colors.textWhite}
                   />
-                  <Text style={styles.compactButtonText}>Download</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.compactButton, styles.dangerButton]}
-              onPress={handleDelete}
-              disabled={downloading || removing}
-              activeOpacity={0.7}
-            >
-              {removing ? (
-                <ActivityIndicator color={Colors.textWhite} size="small" />
-              ) : (
-                <>
-                  <Ionicons name="trash" size={20} color={Colors.textWhite} />
-                  <Text style={styles.compactButtonText}>Remove</Text>
+                  <Text style={styles.compactButtonText}>Download & Open</Text>
                 </>
               )}
             </TouchableOpacity>

@@ -10,9 +10,11 @@ export interface BackendUserResponse {
   id?: number;
   username?: string;
   fullName?: string;
+  fullname?: string;
   full_name?: string;
   name?: string;
   email?: string;
+  phone_number?: string;
   profile?: {
     fullName?: string;
     full_name?: string;
@@ -30,6 +32,7 @@ export function adaptUserResponse(backendUser: BackendUserResponse): User {
     username: backendUser.username ?? "",
     fullName:
       backendUser.fullName ??
+      backendUser.fullname ??
       backendUser.full_name ??
       backendUser.name ??
       backendUser.profile?.fullName ??

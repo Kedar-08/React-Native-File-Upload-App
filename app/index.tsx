@@ -19,9 +19,10 @@ import {
 import * as Yup from "yup";
 
 const loginSchema = Yup.object().shape({
-  email: Yup.string()
-    .email("Invalid email format")
-    .required("Email is required"),
+  username: Yup.string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .required("Username is required"),
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
@@ -49,12 +50,12 @@ export default function LoginScreen() {
   }
 
   async function handleLogin(
-    values: { email: string; password: string },
+    values: { username: string; password: string },
     { setErrors }: any,
   ) {
     try {
       const loginData: LoginData = {
-        email: values.email.trim().toLowerCase(),
+        username: values.username.trim(),
         password: values.password,
       };
 
@@ -63,13 +64,7 @@ export default function LoginScreen() {
       if (result.success) {
         router.replace("/(tabs)/dashboard");
       } else {
-        if (result.field === "email") {
-          setErrors({ email: result.message });
-        } else if (result.field === "password") {
-          setErrors({ password: result.message });
-        } else {
-          setErrors({ password: result.message || "Invalid credentials" });
-        }
+        setErrors({ password: result.message || "Invalid credentials" });
       }
     } catch (error) {
       setErrors({ password: "An unexpected error occurred" });
@@ -96,7 +91,7 @@ export default function LoginScreen() {
         </View>
 
         <Formik
-          initialValues={{ email: "", password: "" }}
+          initialValues={{ username: "", password: "" }}
           validationSchema={loginSchema}
           onSubmit={handleLogin}
         >
@@ -111,15 +106,18 @@ export default function LoginScreen() {
           }) => (
             <View style={styles.form}>
               <InputField
-                label="Email"
-                placeholder="Enter your email"
-                value={values.email}
-                onChangeText={handleChange("email")}
-                onBlur={handleBlur("email")}
-                keyboardType="email-address"
+                label="Username"
+                placeholder="Enter your username"
+                value={values.username}
+                onChangeText={handleChange("username")}
+                onBlur={handleBlur("username")}
                 autoCapitalize="none"
                 autoCorrect={false}
-                error={touched.email && errors.email ? errors.email : undefined}
+                error={
+                  touched.username && errors.username
+                    ? errors.username
+                    : undefined
+                }
               />
 
               <InputField
