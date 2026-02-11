@@ -12,6 +12,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://nonheroic-lumpingly-winfred.ngrok-free.dev"
+      }
+    },
+    "render": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://file-upload-app-4wxc.onrender.com"
       }
     },
     "production": {

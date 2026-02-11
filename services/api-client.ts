@@ -11,10 +11,11 @@ import axios, {
 } from "axios";
 import { normalizeError } from "./normalize-error";
 
-// Base URL for the backend API (development physical device)
-// Do not hardcode URLs elsewhere; update only here.
-// Use ngrok tunnel for tablet to reach backend via HTTPS forwarding
-const API_BASE_URL = "https://nonheroic-lumpingly-winfred.ngrok-free.dev";
+// Base URL for the backend API (from environment variable)
+// Environment variable set per build profile in eas.json
+// Available profiles: preview (ngrok), render (Render deployment)
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 // Create axios instance with base configuration
 const apiClient: AxiosInstance = axios.create({
